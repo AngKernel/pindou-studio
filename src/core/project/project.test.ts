@@ -12,7 +12,7 @@ const id = '11111111-1111-4111-8111-111111111111';
 
 function makeProject(): PatternProject {
   return {
-    formatVersion: 2,
+    formatVersion: 3,
     appVersion: '0.1.0',
     id,
     name: '测试图纸',
@@ -30,6 +30,7 @@ function makeProject(): PatternProject {
     external: Uint8Array.from([0, 0, 0, 1]),
     completed: Uint8Array.from([1, 0, 0, 0]),
     board: { width: 29, height: 29, beadDiameterMm: 5 },
+    makerState: { activeBoardIndex: 0, lastPosition: { row: 1, column: 0 } },
     generationSettings: { mode: 'cartoon', maximumColors: 12, nested: { enabled: true } },
     thumbnailDataUrl: 'data:image/png;base64,iVBORw0KGgo=',
     createdAt: '2026-07-16T01:00:00.000Z',
@@ -81,9 +82,23 @@ describe('project serialization', () => {
     };
 
     const migrated = parseProject(JSON.stringify(previous));
-    expect(migrated.formatVersion).toBe(2);
+    expect(migrated.formatVersion).toBe(3);
     expect(migrated.palette.id).toBe('MARD');
     expect([...migrated.external]).toEqual([0, 0, 0, 0]);
+    expect(migrated.makerState).toEqual({ activeBoardIndex: 0, lastPosition: null });
+  });
+
+  it('migrates V2 projects to the maker-state format', () => {
+    const current = toSerializableProject(makeProject());
+    const previous = {
+      ...current,
+      formatVersion: 2,
+    } as Record<string, unknown>;
+    delete previous.makerState;
+
+    const migrated = parseProject(JSON.stringify(previous));
+    expect(migrated.formatVersion).toBe(3);
+    expect(migrated.makerState).toEqual({ activeBoardIndex: 0, lastPosition: null });
   });
 
   it('returns stable errors for invalid JSON, oversized files, and future versions', () => {
@@ -112,6 +127,18 @@ describe('project serialization', () => {
     expectCode(() => parseProject({
       ...serializable,
       updatedAt: '2026-07-15T00:00:00.000Z',
+    }), 'INVALID_PROJECT');
+    expectCode(() => parseProject({
+      ...serializable,
+      makerState: { activeBoardIndex: 1, lastPosition: null },
+    }), 'INVALID_PROJECT');
+    expectCode(() => parseProject({
+      ...serializable,
+      makerState: { activeBoardIndex: 0, lastPosition: { row: 2, column: 0 } },
+    }), 'INVALID_PROJECT');
+    expectCode(() => parseProject({
+      ...serializable,
+      board: { ...serializable.board, beadDiameterMm: 20.1 },
     }), 'INVALID_PROJECT');
   });
 });

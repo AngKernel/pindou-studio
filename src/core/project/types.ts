@@ -1,6 +1,6 @@
 import type { RgbColor } from '../color';
 
-export const CURRENT_PROJECT_FORMAT_VERSION = 2 as const;
+export const CURRENT_PROJECT_FORMAT_VERSION = 3 as const;
 export const MAX_PROJECT_FILE_BYTES = 5 * 1024 * 1024;
 export const MAX_PROJECT_DIMENSION = 300;
 export const MAX_PROJECT_CELLS = MAX_PROJECT_DIMENSION * MAX_PROJECT_DIMENSION;
@@ -36,6 +36,10 @@ export interface SerializablePatternProject {
     readonly width: number;
     readonly height: number;
     readonly beadDiameterMm: number;
+  };
+  readonly makerState: {
+    readonly activeBoardIndex: number;
+    readonly lastPosition: { readonly row: number; readonly column: number } | null;
   };
   readonly generationSettings: Readonly<Record<string, JsonValue>>;
   readonly thumbnailDataUrl?: string;

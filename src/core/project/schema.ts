@@ -24,6 +24,16 @@ const boardSchema = z.object({
   height: z.number().int().min(1).max(MAX_PROJECT_DIMENSION),
   beadDiameterMm: z.number().positive().max(100),
 }).strict();
+const makerBoardSchema = boardSchema.extend({
+  beadDiameterMm: z.number().min(0.5).max(20),
+});
+const makerStateSchema = z.object({
+  activeBoardIndex: z.number().int().min(0).max(MAX_PROJECT_CELLS - 1),
+  lastPosition: z.object({
+    row: z.number().int().min(0).max(MAX_PROJECT_DIMENSION - 1),
+    column: z.number().int().min(0).max(MAX_PROJECT_DIMENSION - 1),
+  }).strict().nullable(),
+}).strict();
 
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
   z.string().max(20_000),
@@ -67,5 +77,19 @@ export const projectV2Schema = z.object({
   ).optional(),
 }).strict();
 
+export const projectV3Schema = z.object({
+  formatVersion: z.literal(3),
+  ...commonShape,
+  board: makerBoardSchema,
+  palette: paletteSchema,
+  external: z.array(z.number().int().min(0).max(1)).max(MAX_PROJECT_CELLS),
+  makerState: makerStateSchema,
+  generationSettings: z.record(z.string().max(200), jsonValueSchema),
+  thumbnailDataUrl: z.string().max(700_000).regex(
+    /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
+  ).optional(),
+}).strict();
+
 export type ParsedProjectV1 = z.infer<typeof projectV1Schema>;
 export type ParsedProjectV2 = z.infer<typeof projectV2Schema>;
+export type ParsedProjectV3 = z.infer<typeof projectV3Schema>;

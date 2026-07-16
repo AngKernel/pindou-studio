@@ -55,4 +55,33 @@ describe('workspace project adapter', () => {
     expect([...saved.completed]).toEqual([1]);
     expect(saved.createdAt).toBe(first.createdAt);
   });
+
+  it('clamps maker state when board settings reduce the number of regions', () => {
+    const pixels = [[{ key: 'A1', color: '#FFFFFF' }, { key: 'A1', color: '#FFFFFF' }]];
+    const previous = createProjectFromWorkspace({
+      id: '11111111-1111-4111-8111-111111111111',
+      name: '分板调整',
+      mappedPixelData: pixels,
+      width: 2,
+      height: 1,
+      paletteId: 'MARD',
+      generationSettings: {},
+      board: { width: 1, height: 1, beadDiameterMm: 5 },
+      now: '2026-07-16T03:00:00.000Z',
+    });
+    const activePrevious = { ...previous, makerState: { activeBoardIndex: 1, lastPosition: { row: 0, column: 1 } } };
+    const saved = createProjectFromWorkspace({
+      id: previous.id,
+      name: previous.name,
+      mappedPixelData: pixels,
+      width: 2,
+      height: 1,
+      paletteId: 'MARD',
+      generationSettings: {},
+      board: { width: 29, height: 29, beadDiameterMm: 5 },
+      previous: activePrevious,
+      now: '2026-07-16T04:00:00.000Z',
+    });
+    expect(saved.makerState).toEqual({ activeBoardIndex: 0, lastPosition: { row: 0, column: 1 } });
+  });
 });

@@ -23,6 +23,7 @@ import {
   type SelectionRect,
 } from '../core/editor';
 import type { PatternGrid } from '../core/pattern/types';
+import type { BoardSettings } from '../core/board';
 import type { MappedPixel, PaletteColor } from '../utils/pixelation';
 
 type EditorTool = 'pencil' | 'eraser' | 'eyedropper' | 'fill' | 'select' | 'move' | 'pan';
@@ -35,6 +36,7 @@ interface PatternEditorWorkspaceProps {
   readonly gridDimensions: { readonly N: number; readonly M: number };
   readonly palette: readonly PaletteColor[];
   readonly originalImageSrc: string | null;
+  readonly boardSettings?: BoardSettings;
   readonly onChange: (data: MappedPixel[][]) => void;
   readonly onExit: () => void;
 }
@@ -102,6 +104,7 @@ export default function PatternEditorWorkspace({
   gridDimensions,
   palette,
   originalImageSrc,
+  boardSettings,
   onChange,
   onExit,
 }: PatternEditorWorkspaceProps) {
@@ -231,6 +234,24 @@ export default function PatternEditorWorkspace({
       context.drawImage(originalImageRef.current, viewport.panX, viewport.panY, grid.width * cellSize, grid.height * cellSize);
       context.globalAlpha = 1;
     }
+    if (boardSettings) {
+      context.strokeStyle = '#8b5cf6';
+      context.lineWidth = 3;
+      for (let column = boardSettings.width; column < grid.width; column += boardSettings.width) {
+        const x = viewport.panX + column * cellSize;
+        context.beginPath();
+        context.moveTo(x, viewport.panY);
+        context.lineTo(x, viewport.panY + grid.height * cellSize);
+        context.stroke();
+      }
+      for (let row = boardSettings.height; row < grid.height; row += boardSettings.height) {
+        const y = viewport.panY + row * cellSize;
+        context.beginPath();
+        context.moveTo(viewport.panX, y);
+        context.lineTo(viewport.panX + grid.width * cellSize, y);
+        context.stroke();
+      }
+    }
     if (selection) {
       context.strokeStyle = '#fbbf24';
       context.lineWidth = 2;
@@ -253,7 +274,7 @@ export default function PatternEditorWorkspace({
         Math.max(1, cellSize - 2),
       );
     }
-  }, [cellStyle, colors, cursor, grid, highlightSelected, renderVersion, selectedPaletteIndex, selection, showCodes, showGrid, showOriginal, viewport]);
+  }, [boardSettings, cellStyle, colors, cursor, grid, highlightSelected, renderVersion, selectedPaletteIndex, selection, showCodes, showGrid, showOriginal, viewport]);
 
   const canvasPoint = (event: React.PointerEvent<HTMLCanvasElement> | React.WheelEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
