@@ -21,11 +21,15 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test --project=chromium",
+    "test:e2e:edge": "playwright test --project=msedge",
+    "fixtures:generate": "node scripts/generate-phase1-fixtures.mjs",
+    "fixtures:check": "node scripts/generate-phase1-fixtures.mjs --check",
     "licenses:generate": "node scripts/generate-third-party-licenses.mjs",
     "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
     "security:check": "node scripts/check-known-vulnerabilities.mjs",
     "audit:prod:online": "npm audit --omit=dev --audit-level=high",
-    "ci": "npm run lint && npm run typecheck && npm run test && npm run licenses:check && npm run security:check && npm run build"
+    "ci": "npm run lint && npm run typecheck && npm run test && npm run fixtures:check && npm run licenses:check && npm run security:check && npm run audit:prod:online && npm run build"
   },
   "dependencies": {
     "@ducanh2912/next-pwa": "10.2.9",
@@ -35,6 +39,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "1.61.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "22.20.1",
     "@types/react": "19.2.17",

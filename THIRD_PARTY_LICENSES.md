@@ -2,7 +2,7 @@
 
 > 此文件由 `npm run licenses:generate` 根据 `package-lock.json` 生成。
 > 生成日期固定为锁文件变更的审阅时点；包升级后必须重新生成并审阅差异。
-> 共 685 个唯一的包/版本组合，未声明许可证 0 个。
+> 共 689 个唯一的包/版本组合，未声明许可证 0 个。
 
 该清单是工程审计入口。正式发布物还应按各包要求附带 LICENSE、NOTICE、版权和署名文本。
 
@@ -166,6 +166,7 @@
 | `@nodelib/fs.walk` | 1.2.8 | MIT | 运行/构建 |
 | `@nolyfill/is-core-module` | 1.0.39 | MIT | 开发 |
 | `@oxc-project/types` | 0.139.0 | MIT | 开发 |
+| `@playwright/test` | 1.61.1 | Apache-2.0 | 运行/构建 |
 | `@rolldown/binding-android-arm64` | 1.1.5 | MIT | 开发 |
 | `@rolldown/binding-darwin-arm64` | 1.1.5 | MIT | 开发 |
 | `@rolldown/binding-darwin-x64` | 1.1.5 | MIT | 开发 |
@@ -395,6 +396,7 @@
 | `for-each` | 0.3.5 | MIT | 运行/构建 |
 | `fs-extra` | 9.1.0 | MIT | 运行/构建 |
 | `fs.realpath` | 1.0.0 | ISC | 运行/构建 |
+| `fsevents` | 2.3.2 | MIT | 开发 |
 | `fsevents` | 2.3.3 | MIT | 运行/构建 |
 | `function-bind` | 1.1.2 | MIT | 运行/构建 |
 | `function.prototype.name` | 1.1.8 | MIT | 运行/构建 |
@@ -554,6 +556,8 @@
 | `picocolors` | 1.1.1 | ISC | 运行/构建 |
 | `picomatch` | 2.3.2 | MIT | 运行/构建 |
 | `picomatch` | 4.0.5 | MIT | 开发 |
+| `playwright-core` | 1.61.1 | Apache-2.0 | 运行/构建 |
+| `playwright` | 1.61.1 | Apache-2.0 | 运行/构建 |
 | `possible-typed-array-names` | 1.1.0 | MIT | 运行/构建 |
 | `postcss` | 8.5.19 | MIT | 运行/构建 |
 | `prelude-ls` | 1.2.1 | MIT | 开发 |

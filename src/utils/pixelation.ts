@@ -1,20 +1,24 @@
+import { deltaE2000, rgbToLab, type RgbColor } from '../core/color';
+import {
+  compilePalette,
+  findNearestCompiledColor,
+  type CompiledPaletteColor,
+} from '../core/palette';
 import { transparentColorData } from './pixelEditingUtils';
 
 // 定义像素化模式
 export enum PixelationMode {
   Dominant = 'dominant', // 卡通模式（主色）
   Average = 'average',   // 真实模式（平均色）
+  Limited = 'limited',   // 少色模式
+  Dither = 'dither',     // 抖动模式
 }
 
 // 定义色号系统类型
 export type ColorSystem = 'MARD' | 'COCO' | '漫漫' | '盼盼' | '咪小窝';
 
 // --- 必要的类型定义 ---
-export interface RgbColor {
-  r: number;
-  g: number;
-  b: number;
-}
+export type { RgbColor } from '../core/color';
 
 interface OklabColor {
   l: number;
@@ -87,8 +91,8 @@ function getOklabColor(rgb: RgbColor): OklabColor {
   return oklab;
 }
 
-// 使用 Oklab 空间计算颜色距离，并保持与现有 0-100 阈值输入兼容。
-export function colorDistance(rgb1: RgbColor, rgb2: RgbColor): number {
+// 阶段 0 的 Oklab 距离仅保留为回归基线，不再用于默认最近色匹配。
+export function legacyOklabDistance(rgb1: RgbColor, rgb2: RgbColor): number {
   const oklab1 = getOklabColor(rgb1);
   const oklab2 = getOklabColor(rgb2);
 
@@ -99,29 +103,54 @@ export function colorDistance(rgb1: RgbColor, rgb2: RgbColor): number {
   return Math.sqrt(dl * dl + da * da + db * db) * 100;
 }
 
+// 默认颜色距离使用 Lab + CIEDE2000。
+export function colorDistance(rgb1: RgbColor, rgb2: RgbColor): number {
+  return deltaE2000(rgbToLab(rgb1), rgbToLab(rgb2));
+}
+
+interface PreparedLegacyPalette {
+  readonly compiled: readonly CompiledPaletteColor[];
+  readonly originalsById: ReadonlyMap<string, PaletteColor>;
+}
+
+const preparedPaletteCache = new WeakMap<PaletteColor[], PreparedLegacyPalette>();
+
+function prepareLegacyPalette(palette: PaletteColor[]): PreparedLegacyPalette {
+  const cached = preparedPaletteCache.get(palette);
+  if (cached) return cached;
+
+  const originalsById = new Map<string, PaletteColor>();
+  const colors = palette.map((color, index) => {
+    const id = `${color.key}\u0000${color.hex}\u0000${index}`;
+    originalsById.set(id, color);
+    return { id, hex: color.hex, rgb: color.rgb };
+  });
+  const compiled = compilePalette({
+    id: 'legacy-ui-palette',
+    version: colors.map(({ id, rgb }) => `${id}:${rgb.r},${rgb.g},${rgb.b}`).join('|'),
+    colors,
+  }).colors;
+  const prepared = { compiled, originalsById };
+  preparedPaletteCache.set(palette, prepared);
+  return prepared;
+}
+
 // 查找最接近的颜色
 export function findClosestPaletteColor(
   targetRgb: RgbColor,
   palette: PaletteColor[]
 ): PaletteColor {
   if (!palette || palette.length === 0) {
-      console.error("findClosestPaletteColor: Palette is empty or invalid!");
-      // 提供一个健壮的回退
-      return { key: 'ERR', hex: '#000000', rgb: { r: 0, g: 0, b: 0 } };
+    throw new Error('调色板为空，无法生成拼豆图纸。');
   }
 
-  let minDistance = Infinity;
-  let closestColor = palette[0];
-
-  for (const paletteColor of palette) {
-    const distance = colorDistance(targetRgb, paletteColor.rgb);
-    if (distance < minDistance) {
-      minDistance = distance;
-      closestColor = paletteColor;
-    }
-    if (distance === 0) break; // 完全匹配，提前退出
+  const prepared = prepareLegacyPalette(palette);
+  const closest = findNearestCompiledColor(targetRgb, prepared.compiled);
+  const original = prepared.originalsById.get(closest.id);
+  if (!original) {
+    throw new Error('调色板缓存与原始数据不一致。');
   }
-  return closestColor;
+  return original;
 }
 
 
