@@ -6,6 +6,8 @@ import type { PatternProject } from '../core/project';
 import { calculatePatternStatistics, type StatisticsSort } from '../core/statistics';
 import { ExportClient, ExportClientError } from '../features/export/export-client';
 import type { ExportFormat, PdfPrintMode, PngBackground, PngStyle } from '../features/export/types';
+import { useLicensing } from '../features/licensing/LicensingProvider';
+import { MONOCHROME_PDF_ENTITLEMENT } from '../features/licensing/types';
 
 interface ExportPanelProps {
   readonly project: PatternProject | null;
@@ -25,6 +27,8 @@ function downloadArtifact(data: ArrayBuffer, mimeType: string, fileName: string)
 }
 
 export default function ExportPanel({ project }: ExportPanelProps) {
+  const licensing = useLicensing();
+  const monochromeEnabled = licensing.hasEntitlement(MONOCHROME_PDF_ENTITLEMENT);
   const [scope, setScope] = useState<StatisticsScope>('project');
   const [sort, setSort] = useState<StatisticsSort>('code');
   const [pngStyle, setPngStyle] = useState<PngStyle>('pattern');
@@ -38,6 +42,9 @@ export default function ExportPanel({ project }: ExportPanelProps) {
   if (!clientRef.current) clientRef.current = new ExportClient();
 
   useEffect(() => () => clientRef.current?.dispose(), []);
+  useEffect(() => {
+    if (!monochromeEnabled && pdfPrintMode === 'monochrome') setPdfPrintMode('color');
+  }, [monochromeEnabled, pdfPrintMode]);
 
   const activeRegion = useMemo(() => {
     if (!project || scope === 'project') return undefined;
@@ -50,6 +57,10 @@ export default function ExportPanel({ project }: ExportPanelProps) {
 
   const startExport = async (format: ExportFormat) => {
     if (!project || !clientRef.current || running) return;
+    if (format === 'pdf' && pdfPrintMode === 'monochrome' && !monochromeEnabled) {
+      setError('黑白 PDF 是邀请内测功能；彩色 PDF 与其他普通导出始终免费。');
+      return;
+    }
     setRunning(true);
     setError(null);
     setProgress({ completed: 0, total: 100, stage: '准备导出' });
@@ -136,8 +147,11 @@ export default function ExportPanel({ project }: ExportPanelProps) {
 
         <div className="rounded-lg bg-gray-50 p-3 dark:bg-gray-900/60">
           <h3 className="text-sm font-medium">A4 分板 PDF</h3>
-          <select data-testid="pdf-mode" aria-label="PDF 打印模式" value={pdfPrintMode} onChange={(event) => setPdfPrintMode(event.target.value as PdfPrintMode)} className="mt-2 min-h-11 w-full rounded border bg-white px-2 dark:bg-gray-950"><option value="color">彩色打印</option><option value="monochrome">黑白预览接口</option></select>
+          <select data-testid="pdf-mode" aria-label="PDF 打印模式" value={pdfPrintMode} onChange={(event) => setPdfPrintMode(event.target.value as PdfPrintMode)} className="mt-2 min-h-11 w-full rounded border bg-white px-2 dark:bg-gray-950"><option value="color">彩色打印（免费）</option><option value="monochrome" disabled={!monochromeEnabled}>黑白打印（邀请内测）</option></select>
           <button data-testid="export-pdf" disabled={!project || running} onClick={() => { void startExport('pdf'); }} className="mt-3 min-h-11 w-full rounded bg-violet-600 px-3 text-white disabled:opacity-50">导出 PDF</button>
+          <p data-testid="pdf-entitlement" className="mt-2 text-xs text-gray-500">
+            {monochromeEnabled ? '当前设备已解锁实验性黑白打印。' : <><a href="/activation" className="text-violet-600 underline">输入邀请激活码</a>可测试黑白打印；彩色 PDF 不受影响。</>}
+          </p>
         </div>
       </div>
 

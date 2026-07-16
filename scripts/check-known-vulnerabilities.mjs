@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
+import { extname, join, relative } from 'node:path';
 
 const lockPath = new URL('../package-lock.json', import.meta.url);
 const lock = JSON.parse(await readFile(lockPath, 'utf8'));
@@ -66,3 +67,34 @@ if (findings.length > 0) {
 }
 
 console.log('阶段 0 已知漏洞版本离线检查通过。');
+
+const ignoredDirectories = new Set(['.git', '.next', 'node_modules', 'coverage', 'test-results', 'playwright-report', 'docs']);
+const textExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.json', '.yml', '.yaml', '.md', '.example']);
+async function textFiles(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(entries.map(async (entry) => {
+    if (ignoredDirectories.has(entry.name) || entry.name === 'PROJECT_BRIEF.md') return [];
+    if (entry.name.startsWith('.env') && entry.name !== '.env.example') return [];
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return textFiles(path);
+    return textExtensions.has(extname(entry.name)) || entry.name === '.env.example' ? [path] : [];
+  }));
+  return nested.flat();
+}
+
+const secretPatterns = [
+  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bgh[pousr]_[A-Za-z0-9]{30,}\b/,
+  /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
+];
+const files = await textFiles(process.cwd());
+for (const file of files) {
+  const source = await readFile(file, 'utf8');
+  const matched = secretPatterns.find((pattern) => pattern.test(source));
+  if (matched) throw new Error(`发现疑似已提交秘密：${relative(process.cwd(), file)} (${matched.source})`);
+  if (file.includes(`${join('src', '')}`) && /\b(?:ACTIVATION_HMAC_SECRET|TOKEN_SIGNING_SECRET|REFRESH_HMAC_SECRET|ADMIN_API_SECRET|DATABASE_URL)\b/.test(source)) {
+    throw new Error(`公开前端包含服务端配置名称：${relative(process.cwd(), file)}`);
+  }
+}
+console.log(`秘密与前后端配置边界检查通过（${files.length} 个文本文件）。`);

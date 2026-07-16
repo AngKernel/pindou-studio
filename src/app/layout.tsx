@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { LicensingProvider } from "../features/licensing/LicensingProvider";
 
 export const metadata: Metadata = {
   title: "Pindou Studio | 拼豆工作台",
@@ -39,7 +40,7 @@ export default function RootLayout({
       <body
         className="antialiased overflow-x-hidden bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
       >
-        {children}
+        <LicensingProvider>{children}</LicensingProvider>
       </body>
     </html>
   );
