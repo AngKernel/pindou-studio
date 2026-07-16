@@ -5,7 +5,15 @@ import Script from 'next/script';
 import InstallPWA from '../components/InstallPWA';
 import ImageTransformControls from '../components/ImageTransformControls';
 import PatternEditorWorkspace from '../components/PatternEditorWorkspace';
+import LocalProjectsPanel from '../components/LocalProjectsPanel';
 import { ImageImportError } from '../core/image/import-policy';
+import {
+  MAX_PROJECT_FILE_BYTES,
+  ProjectError,
+  parseProject,
+  serializeProject,
+  type PatternProject,
+} from '../core/project';
 import {
   createDefaultImageTransform,
   type ImageTransformSettings,
@@ -16,6 +24,9 @@ import {
   GeneratorClientError,
 } from '../features/generator/generator-client';
 import { validateAndDecodeBrowserImageFile } from '../features/import/validate-browser-image';
+import { createProjectFromWorkspace, restoreProjectToWorkspace } from '../features/projects/project-adapter';
+import { createProjectThumbnail } from '../features/projects/project-thumbnail';
+import { IndexedDbProjectStore, type ProjectSummary } from '../storage';
 
 // 导入像素化工具和类型
 import {
@@ -222,6 +233,12 @@ export default function Home() {
 
   // 新增：轻量提示
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectName, setActiveProjectName] = useState('未命名项目');
+  const [projectSaveState, setProjectSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [projectMessage, setProjectMessage] = useState<string | null>(null);
+  const [restoredProjectMode, setRestoredProjectMode] = useState(false);
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2000);
@@ -346,6 +363,9 @@ export default function Home() {
   const imageImportTaskIdRef = useRef(0);
   const generatorClientRef = useRef<GeneratorClient | null>(null);
   const generationRequestIdRef = useRef(0);
+  const projectStoreRef = useRef<IndexedDbProjectStore | null>(null);
+  const currentProjectRef = useRef<PatternProject | null>(null);
+  const skipNextAutosaveRef = useRef(false);
   // ++ 添加: Ref for import file input ++
   const importPaletteInputRef = useRef<HTMLInputElement>(null);
   //const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -355,6 +375,22 @@ export default function Home() {
 
   // ++ Add a ref for the main element ++
   const mainRef = useRef<HTMLElement>(null);
+
+  const refreshProjects = useCallback(async () => {
+    const store = projectStoreRef.current;
+    if (!store) return;
+    try {
+      setProjects(await store.list());
+    } catch (error) {
+      setProjectMessage(error instanceof ProjectError ? error.userMessage : '无法读取本地项目列表。');
+      setProjectSaveState('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    projectStoreRef.current = new IndexedDbProjectStore();
+    void refreshProjects();
+  }, [refreshProjects]);
 
   useEffect(() => {
     return () => {
@@ -588,7 +624,7 @@ export default function Home() {
   };
 
   // 根据mappedPixelData生成合成的originalImageSrc
-  const generateSyntheticImageFromPixelData = (pixelData: MappedPixel[][], dimensions: { N: number; M: number }): string => {
+  const generateSyntheticImageFromPixelData = useCallback((pixelData: MappedPixel[][], dimensions: { N: number; M: number }): string => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     
@@ -621,11 +657,216 @@ export default function Home() {
     
     // 转换为dataURL
     return canvas.toDataURL('image/png');
-  };
+  }, []);
+
+  const handleOpenProject = useCallback(async (id: string) => {
+    const store = projectStoreRef.current;
+    if (!store) return;
+    try {
+      const project = await store.get(id);
+      if (!project) throw new ProjectError('PROJECT_NOT_FOUND', '找不到要打开的本地项目。');
+      const restored = restoreProjectToWorkspace(project);
+      skipNextAutosaveRef.current = true;
+      currentProjectRef.current = project;
+      setRestoredProjectMode(true);
+      setActiveProjectId(project.id);
+      setActiveProjectName(project.name);
+      setSelectedColorSystem(restored.selectedColorSystem);
+      setGridDimensions(restored.gridDimensions);
+      handleEditorDataChange(restored.mappedPixelData);
+      setSourceImageDimensions(null);
+      setImageTransform(null);
+      setGranularity(project.width);
+      setGridHeight(project.height);
+      setOriginalImageSrc(generateSyntheticImageFromPixelData(restored.mappedPixelData, restored.gridDimensions));
+      setIsManualColoringMode(false);
+      setSelectedColor(null);
+      setGenerationStatus({ state: 'idle', completed: 0, total: 0 });
+      setProjectSaveState('saved');
+      setProjectMessage(null);
+    } catch (error) {
+      setProjectMessage(error instanceof ProjectError ? error.userMessage : '无法打开本地项目。');
+      setProjectSaveState('error');
+    }
+  }, [generateSyntheticImageFromPixelData, handleEditorDataChange]);
+
+  const handleRenameProject = useCallback(async (id: string, currentName: string) => {
+    const name = window.prompt('输入新的项目名称', currentName);
+    if (name === null) return;
+    const store = projectStoreRef.current;
+    if (!store) return;
+    try {
+      const renamed = await store.rename(id, name);
+      if (activeProjectId === id) {
+        currentProjectRef.current = renamed;
+        setActiveProjectName(renamed.name);
+      }
+      setProjectMessage(null);
+      await refreshProjects();
+    } catch (error) {
+      setProjectMessage(error instanceof ProjectError ? error.userMessage : '项目重命名失败。');
+    }
+  }, [activeProjectId, refreshProjects]);
+
+  const handleDuplicateProject = useCallback(async (id: string) => {
+    const store = projectStoreRef.current;
+    if (!store) return;
+    try {
+      await store.duplicate(id);
+      setProjectMessage(null);
+      await refreshProjects();
+    } catch (error) {
+      setProjectMessage(error instanceof ProjectError ? error.userMessage : '项目复制失败。');
+    }
+  }, [refreshProjects]);
+
+  const handleDeleteProject = useCallback(async (id: string, name: string) => {
+    if (!window.confirm(`确定删除“${name}”吗？此操作无法撤销。`)) return;
+    const store = projectStoreRef.current;
+    if (!store) return;
+    try {
+      await store.delete(id);
+      if (activeProjectId === id) {
+        currentProjectRef.current = null;
+        setActiveProjectId(null);
+        setActiveProjectName('未命名项目');
+        setMappedPixelData(null);
+        setGridDimensions(null);
+        setColorCounts(null);
+        setTotalBeadCount(0);
+        setOriginalImageSrc(null);
+        setRestoredProjectMode(false);
+        setProjectSaveState('idle');
+      }
+      setProjectMessage(null);
+      await refreshProjects();
+    } catch (error) {
+      setProjectMessage(error instanceof ProjectError ? error.userMessage : '项目删除失败。');
+    }
+  }, [activeProjectId, refreshProjects]);
+
+  const handleExportProject = useCallback(async (id: string) => {
+    const store = projectStoreRef.current;
+    if (!store) return;
+    try {
+      const project = await store.get(id);
+      if (!project) throw new ProjectError('PROJECT_NOT_FOUND', '找不到要导出的本地项目。');
+      const blob = new Blob([serializeProject(project)], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${project.name.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) || 'pindou-project'}.bead.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setProjectMessage(null);
+    } catch (error) {
+      setProjectMessage(error instanceof ProjectError ? error.userMessage : '项目导出失败。');
+    }
+  }, []);
+
+  const handleImportProject = useCallback(async (file: File) => {
+    const store = projectStoreRef.current;
+    if (!store) return;
+    try {
+      if (file.size > MAX_PROJECT_FILE_BYTES) {
+        throw new ProjectError('PROJECT_TOO_LARGE', '项目文件不能超过 5 MB。');
+      }
+      let project = parseProject(await file.text());
+      const existing = await store.get(project.id);
+      if (existing) {
+        const timestamp = new Date().toISOString();
+        project = {
+          ...project,
+          id: crypto.randomUUID(),
+          name: `${project.name.slice(0, 193)}（导入）`,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+      }
+      await store.put(project);
+      await refreshProjects();
+      await handleOpenProject(project.id);
+      setProjectMessage(null);
+    } catch (error) {
+      setProjectMessage(error instanceof ProjectError ? error.userMessage : '项目文件导入失败。');
+      setProjectSaveState('error');
+    }
+  }, [handleOpenProject, refreshProjects]);
+
+  useEffect(() => {
+    if (!mappedPixelData || !gridDimensions) return;
+    if (skipNextAutosaveRef.current) {
+      skipNextAutosaveRef.current = false;
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      const store = projectStoreRef.current;
+      if (!store) return;
+      const now = new Date().toISOString();
+      const id = activeProjectId ?? crypto.randomUUID();
+      const name = activeProjectName.trim() || `拼豆项目 ${new Date().toLocaleString('zh-CN')}`;
+      const previous = currentProjectRef.current?.id === id ? currentProjectRef.current : null;
+      let project: PatternProject;
+      try {
+        project = createProjectFromWorkspace({
+          id,
+          name,
+          mappedPixelData,
+          width: gridDimensions.N,
+          height: gridDimensions.M,
+          paletteId: selectedColorSystem,
+          generationSettings: {
+            pixelationMode,
+            similarityThreshold,
+            maximumColors,
+            minimumRegionSize,
+          },
+          thumbnailDataUrl: createProjectThumbnail(mappedPixelData, gridDimensions.N, gridDimensions.M),
+          previous,
+          now,
+        });
+      } catch (error) {
+        setProjectMessage(error instanceof Error ? error.message : '无法准备本地项目数据。');
+        setProjectSaveState('error');
+        return;
+      }
+      setProjectSaveState('saving');
+      void store.put(project)
+        .then(async () => {
+          currentProjectRef.current = project;
+          setActiveProjectId(project.id);
+          setActiveProjectName(project.name);
+          setProjectSaveState('saved');
+          setProjectMessage(null);
+          await refreshProjects();
+        })
+        .catch((error: unknown) => {
+          setProjectSaveState('error');
+          setProjectMessage(error instanceof ProjectError ? error.userMessage : '自动保存失败，请导出备份。');
+        });
+    }, 750);
+    return () => window.clearTimeout(timeout);
+  }, [
+    activeProjectId,
+    activeProjectName,
+    gridDimensions,
+    mappedPixelData,
+    maximumColors,
+    minimumRegionSize,
+    pixelationMode,
+    refreshProjects,
+    selectedColorSystem,
+    similarityThreshold,
+  ]);
 
   const processFile = async (file: File): Promise<void> => {
     const importTaskId = ++imageImportTaskIdRef.current;
     setImportError(null);
+    setRestoredProjectMode(false);
+    currentProjectRef.current = null;
+    setActiveProjectId(null);
+    setActiveProjectName('未命名项目');
+    setProjectSaveState('idle');
     // 检查文件类型
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
     
@@ -1122,6 +1363,7 @@ export default function Home() {
 
   // 修改useEffect中的pixelateImage调用，加入模式参数
   useEffect(() => {
+    if (restoredProjectMode) return;
     if (originalImageSrc && activeBeadPalette.length > 0) {
        const timeoutId = setTimeout(() => {
          if (originalImageSrc && originalCanvasRef.current && pixelatedCanvasRef.current && activeBeadPalette.length > 0) {
@@ -1155,7 +1397,7 @@ export default function Home() {
         // setTotalBeadCount(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [originalImageSrc, granularity, gridHeight, similarityThreshold, maximumColors, minimumRegionSize, customPaletteSelections, pixelationMode, remapTrigger, imageTransform]);
+  }, [originalImageSrc, granularity, gridHeight, similarityThreshold, maximumColors, minimumRegionSize, customPaletteSelections, pixelationMode, remapTrigger, imageTransform, restoredProjectMode]);
 
   // 确保文件输入框引用在组件挂载后正确设置
   useEffect(() => {
@@ -2242,6 +2484,19 @@ export default function Home() {
 
       {/* Apply dark mode styles to the main section */}
       <main ref={mainRef} className="w-full md:max-w-4xl flex flex-col items-center space-y-5 sm:space-y-6 relative overflow-hidden">
+        <LocalProjectsPanel
+          projects={projects}
+          activeProjectId={activeProjectId}
+          activeProjectName={activeProjectName}
+          saveState={projectSaveState}
+          message={projectMessage}
+          onOpen={(id) => { void handleOpenProject(id); }}
+          onRename={(id, name) => { void handleRenameProject(id, name); }}
+          onDuplicate={(id) => { void handleDuplicateProject(id); }}
+          onDelete={(id, name) => { void handleDeleteProject(id, name); }}
+          onExport={(id) => { void handleExportProject(id); }}
+          onImport={(file) => { void handleImportProject(file); }}
+        />
         {/* Apply dark mode styles to the Drop Zone */}
         <div
           data-testid="image-drop-zone"
