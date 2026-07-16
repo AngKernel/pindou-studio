@@ -1,0 +1,620 @@
+{
+  "formatVersion": 1,
+  "fixtures": [
+    {
+      "id": "anime-avatar-1",
+      "category": "anime-avatar",
+      "mode": "realistic",
+      "finalColorCount": 8,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 4,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 155,
+      "blackCells": 0,
+      "distribution": {
+        "brown": 16,
+        "charcoal": 8,
+        "deep-purple": 155,
+        "gray": 14,
+        "pink": 4,
+        "skin-light": 182,
+        "skin-medium": 4,
+        "white": 641
+      },
+      "semanticSha256": "106e88e1355885399235f8a6beb6be1643f76e7c2cc25f7ef827b23a68703daa"
+    },
+    {
+      "id": "anime-avatar-2",
+      "category": "anime-avatar",
+      "mode": "cartoon",
+      "finalColorCount": 5,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 186,
+      "blackCells": 0,
+      "distribution": {
+        "charcoal": 16,
+        "navy": 186,
+        "red": 4,
+        "skin-light": 192,
+        "sky": 626
+      },
+      "semanticSha256": "1914e95dbc46d72638da5f07aac7ff28375e3eef6ccf04d65fa869b1145c1af9"
+    },
+    {
+      "id": "anime-avatar-3",
+      "category": "anime-avatar",
+      "mode": "limited",
+      "finalColorCount": 5,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 186,
+      "blackCells": 0,
+      "distribution": {
+        "charcoal": 16,
+        "deep-purple": 186,
+        "red": 4,
+        "skin-light": 192,
+        "sky": 626
+      },
+      "semanticSha256": "c21945cef262073c4672c96b78986e1c3daa9ba88f21806ace02b24a86e55efb"
+    },
+    {
+      "id": "human-portrait-1",
+      "category": "human-portrait",
+      "mode": "dither",
+      "finalColorCount": 12,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 14,
+      "grayAdjacentToBlack": 6,
+      "darkChromaticCells": 2,
+      "blackCells": 89,
+      "distribution": {
+        "black": 89,
+        "brown": 89,
+        "charcoal": 15,
+        "deep-green": 57,
+        "gray": 516,
+        "green": 2,
+        "navy": 2,
+        "pink": 111,
+        "purple": 3,
+        "skin-dark": 4,
+        "skin-medium": 134,
+        "tan": 2
+      },
+      "semanticSha256": "5de03f81ef4721b183b73faca069e2fae5da1dc2577ef3b59ee0ce300f9e4bb3"
+    },
+    {
+      "id": "human-portrait-2",
+      "category": "human-portrait",
+      "mode": "realistic",
+      "finalColorCount": 8,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 7,
+      "darkChromaticCells": 87,
+      "blackCells": 85,
+      "distribution": {
+        "black": 85,
+        "blue": 112,
+        "brown": 28,
+        "charcoal": 14,
+        "gray": 483,
+        "navy": 87,
+        "purple": 88,
+        "skin-dark": 127
+      },
+      "semanticSha256": "8cc719c3bf351747d2c4ac60c4bcbda0c7446e754315445cdd2ec8f11ebee4c6"
+    },
+    {
+      "id": "human-portrait-3",
+      "category": "human-portrait",
+      "mode": "cartoon",
+      "finalColorCount": 8,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 104,
+      "blackCells": 0,
+      "distribution": {
+        "brown": 4,
+        "charcoal": 96,
+        "gray": 388,
+        "navy": 104,
+        "orange": 110,
+        "purple": 172,
+        "skin-light": 39,
+        "skin-medium": 111
+      },
+      "semanticSha256": "4f55846374c9027857fbde966f7bf9ab1b6ec5ee904ff168d464b10217464420"
+    },
+    {
+      "id": "pet-1",
+      "category": "pet",
+      "mode": "limited",
+      "finalColorCount": 8,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 6,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 14,
+      "distribution": {
+        "black": 14,
+        "brown": 5,
+        "charcoal": 4,
+        "red": 5,
+        "skin-dark": 71,
+        "sky": 2,
+        "tan": 230,
+        "white": 693
+      },
+      "semanticSha256": "75d135050df5e287fcd5e4def35c6e49360760c894ee60db23b2b75240e97571"
+    },
+    {
+      "id": "pet-2",
+      "category": "pet",
+      "mode": "dither",
+      "finalColorCount": 6,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 5,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 10,
+      "distribution": {
+        "black": 10,
+        "brown": 279,
+        "charcoal": 7,
+        "gray": 11,
+        "sky": 3,
+        "white": 714
+      },
+      "semanticSha256": "ab7ccbe88cc13c984e19ca896306bdeb76d88518fb83579cb0d664e266e7ec22"
+    },
+    {
+      "id": "pet-3",
+      "category": "pet",
+      "mode": "realistic",
+      "finalColorCount": 5,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 9,
+      "grayAdjacentToBlack": 10,
+      "darkChromaticCells": 0,
+      "blackCells": 6,
+      "distribution": {
+        "black": 6,
+        "brown": 2,
+        "gray": 10,
+        "pink": 6,
+        "white": 1000
+      },
+      "semanticSha256": "19deea073e35dd4e0ce7dfd65ff10f10ae1006d51cf0fc2d48944f786053f561"
+    },
+    {
+      "id": "logo-1",
+      "category": "logo",
+      "mode": "cartoon",
+      "finalColorCount": 3,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "charcoal": 240,
+        "pink": 148,
+        "white": 636
+      },
+      "semanticSha256": "a7bd0e12e6838006c0279016491902771d65f764e5aee3d74b5852c6eac348b6"
+    },
+    {
+      "id": "logo-2",
+      "category": "logo",
+      "mode": "limited",
+      "finalColorCount": 3,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 112,
+        "charcoal": 672,
+        "white": 240
+      },
+      "semanticSha256": "860a94a409d493df834424a67de1c247a7dc45a27a4962a3a3cc92b4880ea0b0"
+    },
+    {
+      "id": "logo-3",
+      "category": "logo",
+      "mode": "dither",
+      "finalColorCount": 7,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 47,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 270,
+      "distribution": {
+        "black": 270,
+        "brown": 129,
+        "charcoal": 161,
+        "cream": 21,
+        "orange": 106,
+        "tan": 114,
+        "white": 223
+      },
+      "semanticSha256": "3510aa2516d5373a61c66231242e5357ab0a98bb7b97212e70ad800bc41a0479"
+    },
+    {
+      "id": "meme-1",
+      "category": "meme",
+      "mode": "realistic",
+      "finalColorCount": 5,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 4,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "charcoal": 21,
+        "cream": 30,
+        "tan": 13,
+        "white": 680,
+        "yellow": 280
+      },
+      "semanticSha256": "98e66711db4e8e60cd32c62770340793886669867946906414cae61fa9d97392"
+    },
+    {
+      "id": "meme-2",
+      "category": "meme",
+      "mode": "cartoon",
+      "finalColorCount": 3,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "charcoal": 20,
+        "skin-light": 270,
+        "white": 734
+      },
+      "semanticSha256": "d23e7e0e00d7868c878bdaadeb561494485b36397307243371d89f79694bf508"
+    },
+    {
+      "id": "meme-3",
+      "category": "meme",
+      "mode": "limited",
+      "finalColorCount": 4,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 64,
+        "charcoal": 30,
+        "skin-medium": 282,
+        "white": 648
+      },
+      "semanticSha256": "7bb0cdb1b84122076a80a39683a91d86bcd4a3515e4f87136fa8c8940e6c4af7"
+    },
+    {
+      "id": "landscape-1",
+      "category": "landscape",
+      "mode": "dither",
+      "finalColorCount": 6,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 11,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 57,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 368,
+        "deep-green": 393,
+        "gray": 104,
+        "navy": 57,
+        "sky": 68,
+        "yellow": 34
+      },
+      "semanticSha256": "9d9ed12d09bde793e7e2c5381c1e174a269ef92ffc059c77534ccad04f583a81"
+    },
+    {
+      "id": "landscape-2",
+      "category": "landscape",
+      "mode": "realistic",
+      "finalColorCount": 7,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 8,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 461,
+        "cream": 2,
+        "deep-green": 184,
+        "gray": 140,
+        "green": 192,
+        "sky": 11,
+        "yellow": 34
+      },
+      "semanticSha256": "b315b639e880098c1a828883fe15a4c76f1880032457db0e40abb91324a0765c"
+    },
+    {
+      "id": "landscape-3",
+      "category": "landscape",
+      "mode": "cartoon",
+      "finalColorCount": 5,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 160,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 425,
+        "gray": 178,
+        "green": 223,
+        "navy": 160,
+        "yellow": 38
+      },
+      "semanticSha256": "e51b01a971fb7373e80e0acbaa01ab4a24425b0c90a27568e782269bd6273bf8"
+    },
+    {
+      "id": "transparent-1",
+      "category": "transparent",
+      "mode": "limited",
+      "finalColorCount": 1,
+      "totalCells": 1024,
+      "activeCells": 384,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "pink": 384
+      },
+      "semanticSha256": "a16696e6d904969dbc302c2c6b353945e92cd08a1af41c063934ccae7d9f6e1c"
+    },
+    {
+      "id": "transparent-2",
+      "category": "transparent",
+      "mode": "dither",
+      "finalColorCount": 1,
+      "totalCells": 1024,
+      "activeCells": 312,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 312
+      },
+      "semanticSha256": "38fa82aaa7f994d358f4c95e17080ac1e946e6aac0f85446bd02d2502be7d43f"
+    },
+    {
+      "id": "transparent-3",
+      "category": "transparent",
+      "mode": "realistic",
+      "finalColorCount": 1,
+      "totalCells": 1024,
+      "activeCells": 264,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "orange": 264
+      },
+      "semanticSha256": "cfb3c4306d9bce1c279abfcaa5905558b84a669a182f695c0b44627350b171d6"
+    },
+    {
+      "id": "dark-1",
+      "category": "dark",
+      "mode": "cartoon",
+      "finalColorCount": 2,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 1,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 69,
+      "blackCells": 955,
+      "distribution": {
+        "black": 955,
+        "deep-blue": 69
+      },
+      "semanticSha256": "1c52e28a27bd288d9b69eed98addfa821e53f772df3c0600ee84bf53fe991872"
+    },
+    {
+      "id": "dark-2",
+      "category": "dark",
+      "mode": "limited",
+      "finalColorCount": 3,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 103,
+      "blackCells": 921,
+      "distribution": {
+        "black": 921,
+        "deep-blue": 40,
+        "deep-purple": 63
+      },
+      "semanticSha256": "181c16c4f2ca57bfbf68989b4a503493656cb20adb72691908c768f5e5acfe95"
+    },
+    {
+      "id": "dark-3",
+      "category": "dark",
+      "mode": "dither",
+      "finalColorCount": 5,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 4,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 105,
+      "blackCells": 917,
+      "distribution": {
+        "black": 917,
+        "charcoal": 2,
+        "deep-blue": 33,
+        "deep-purple": 66,
+        "navy": 6
+      },
+      "semanticSha256": "a589f9770872c28dab45d4b636a5f39b4311e9a3ed18e3270ee941b6d363d77c"
+    },
+    {
+      "id": "gradient-1",
+      "category": "gradient",
+      "mode": "realistic",
+      "finalColorCount": 15,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 191,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 96,
+        "cyan": 102,
+        "deep-blue": 52,
+        "deep-purple": 85,
+        "gray": 39,
+        "green": 37,
+        "lime": 141,
+        "navy": 54,
+        "orange": 33,
+        "purple": 68,
+        "red": 134,
+        "skin-dark": 44,
+        "sky": 12,
+        "tan": 67,
+        "yellow": 60
+      },
+      "semanticSha256": "3c047604fe502bd1850bb7debc8ca5f72c4c4be67055add2970a4b8c85cb1054"
+    },
+    {
+      "id": "gradient-2",
+      "category": "gradient",
+      "mode": "cartoon",
+      "finalColorCount": 13,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 76,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 145,
+        "cyan": 146,
+        "gray": 79,
+        "green": 60,
+        "lime": 140,
+        "navy": 76,
+        "orange": 46,
+        "purple": 42,
+        "red": 63,
+        "skin-dark": 40,
+        "sky": 11,
+        "tan": 102,
+        "yellow": 74
+      },
+      "semanticSha256": "fbb0f30df5b9bdd7eda6ba668f514b1eb60b9a42ac96354616767faa93bb7e61"
+    },
+    {
+      "id": "gradient-3",
+      "category": "gradient",
+      "mode": "limited",
+      "finalColorCount": 5,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 38,
+        "gray": 66,
+        "pink": 108,
+        "purple": 596,
+        "red": 216
+      },
+      "semanticSha256": "6e2bcf60339f156f9b6ff38cb2cf91f2c3bce37bd082ab006f3e4517a482c0c7"
+    },
+    {
+      "id": "low-resolution-1",
+      "category": "low-resolution",
+      "mode": "dither",
+      "finalColorCount": 3,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "charcoal": 352,
+        "cream": 336,
+        "pink": 336
+      },
+      "semanticSha256": "f445e746f9517e67eedd9de29b6d1781739580f8fb381dbe0e99fe363d4a5d51"
+    },
+    {
+      "id": "low-resolution-2",
+      "category": "low-resolution",
+      "mode": "realistic",
+      "finalColorCount": 4,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "blue": 256,
+        "charcoal": 256,
+        "cream": 256,
+        "green": 256
+      },
+      "semanticSha256": "0addc95414dde8a0dfc308317a6ff0322a573d5b9e9d6fcd820923d597907dd5"
+    },
+    {
+      "id": "low-resolution-3",
+      "category": "low-resolution",
+      "mode": "cartoon",
+      "finalColorCount": 4,
+      "totalCells": 1024,
+      "activeCells": 1024,
+      "smallRegionCount": 0,
+      "grayAdjacentToBlack": 0,
+      "darkChromaticCells": 0,
+      "blackCells": 0,
+      "distribution": {
+        "charcoal": 204,
+        "cream": 208,
+        "green": 408,
+        "orange": 204
+      },
+      "semanticSha256": "38079a0e5ad203e3bea6bbd1158306c1383a6cbcf584eaecb3d77a5d6f22650e"
+    }
+  ]
+}

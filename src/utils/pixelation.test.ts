@@ -3,6 +3,7 @@ import {
   colorDistance,
   findClosestPaletteColor,
   hexToRgb,
+  legacyOklabDistance,
   type PaletteColor,
 } from './pixelation';
 
@@ -28,12 +29,28 @@ describe('pixelation color helpers', () => {
     );
   });
 
+  it('keeps the previous Oklab distance as an explicit regression baseline', () => {
+    const first = { r: 12, g: 34, b: 56 };
+    const second = { r: 78, g: 90, b: 123 };
+    expect(legacyOklabDistance(first, first)).toBe(0);
+    expect(legacyOklabDistance(first, second)).toBeCloseTo(
+      legacyOklabDistance(second, first),
+      12,
+    );
+  });
+
   it('selects the nearest palette entry deterministically', () => {
     expect(findClosestPaletteColor({ r: 3, g: 4, b: 5 }, palette)).toBe(
       palette[0],
     );
     expect(findClosestPaletteColor({ r: 250, g: 251, b: 252 }, palette)).toBe(
       palette[1],
+    );
+  });
+
+  it('rejects an empty palette instead of silently returning black', () => {
+    expect(() => findClosestPaletteColor({ r: 1, g: 2, b: 3 }, [])).toThrow(
+      '调色板为空',
     );
   });
 });

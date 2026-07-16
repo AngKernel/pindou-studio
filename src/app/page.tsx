@@ -3,16 +3,25 @@
 import React, { useState, useRef, ChangeEvent, DragEvent, useEffect, useMemo, useCallback } from 'react';
 import Script from 'next/script';
 import InstallPWA from '../components/InstallPWA';
+import ImageTransformControls from '../components/ImageTransformControls';
+import { ImageImportError } from '../core/image/import-policy';
+import {
+  createDefaultImageTransform,
+  type ImageTransformSettings,
+} from '../core/image/transform';
+import type { GenerationMode } from '../core/pattern/generate';
+import {
+  GeneratorClient,
+  GeneratorClientError,
+} from '../features/generator/generator-client';
+import { validateAndDecodeBrowserImageFile } from '../features/import/validate-browser-image';
 
 // 导入像素化工具和类型
 import {
   PixelationMode,
-  calculatePixelGrid,
-  RgbColor,
   PaletteColor,
   MappedPixel,
   hexToRgb,
-  colorDistance,
   findClosestPaletteColor
 } from '../utils/pixelation';
 
@@ -101,10 +110,25 @@ import FocusModePreDownloadModal from '../components/FocusModePreDownloadModal';
 
 export default function Home() {
   const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<number>(50);
   const [granularityInput, setGranularityInput] = useState<string>("50");
-  const [similarityThreshold, setSimilarityThreshold] = useState<number>(30);
-  const [similarityThresholdInput, setSimilarityThresholdInput] = useState<string>("30");
+  const [gridHeight, setGridHeight] = useState<number>(50);
+  const [gridHeightInput, setGridHeightInput] = useState<string>('50');
+  const [lockGridAspectRatio, setLockGridAspectRatio] = useState(true);
+  const [sourceImageDimensions, setSourceImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [imageTransform, setImageTransform] = useState<ImageTransformSettings | null>(null);
+  const [similarityThreshold, setSimilarityThreshold] = useState<number>(4);
+  const [similarityThresholdInput, setSimilarityThresholdInput] = useState<string>('4');
+  const [maximumColors, setMaximumColors] = useState(24);
+  const [minimumRegionSize, setMinimumRegionSize] = useState(2);
+  const [generationStatus, setGenerationStatus] = useState<{
+    state: 'idle' | 'running' | 'complete' | 'error';
+    completed: number;
+    total: number;
+    message?: string;
+    processingMs?: number;
+  }>({ state: 'idle', completed: 0, total: 0 });
   // 添加像素化模式状态
   const [pixelationMode, setPixelationMode] = useState<PixelationMode>(PixelationMode.Dominant); // 默认为卡通模式
   
@@ -315,6 +339,10 @@ export default function Home() {
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
   const pixelatedCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeImageObjectUrlRef = useRef<string | null>(null);
+  const imageImportTaskIdRef = useRef(0);
+  const generatorClientRef = useRef<GeneratorClient | null>(null);
+  const generationRequestIdRef = useRef(0);
   // ++ 添加: Ref for import file input ++
   const importPaletteInputRef = useRef<HTMLInputElement>(null);
   //const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -324,6 +352,15 @@ export default function Home() {
 
   // ++ Add a ref for the main element ++
   const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (activeImageObjectUrlRef.current) {
+        URL.revokeObjectURL(activeImageObjectUrlRef.current);
+      }
+      generatorClientRef.current?.dispose();
+    };
+  }, []);
 
   // --- Derived State ---
 
@@ -343,8 +380,9 @@ export default function Home() {
   // ++ 添加：当状态变化时同步更新输入框的值 ++
   useEffect(() => {
     setGranularityInput(granularity.toString());
+    setGridHeightInput(gridHeight.toString());
     setSimilarityThresholdInput(similarityThreshold.toString());
-  }, [granularity, similarityThreshold]);
+  }, [granularity, gridHeight, similarityThreshold]);
 
   // ++ Calculate unique colors currently on the grid for the palette ++
   const currentGridColors = useMemo(() => {
@@ -497,25 +535,8 @@ export default function Home() {
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // 检查文件类型是否支持
-      const fileName = file.name.toLowerCase();
-      const fileType = file.type.toLowerCase();
-      
-      // 支持的图片类型
-      const supportedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-      // 支持的CSV MIME类型（不同浏览器可能返回不同的MIME类型）
-      const supportedCsvTypes = ['text/csv', 'application/csv', 'text/plain'];
-
-      const isImageFile = supportedImageTypes.includes(fileType) || fileType.startsWith('image/');
-      const isCsvFile = supportedCsvTypes.includes(fileType) || fileName.endsWith('.csv');
-
-      if (isImageFile || isCsvFile) {
-        setExcludedColorKeys(new Set()); // ++ 重置排除列表 ++
-        processFile(file);
-      } else {
-        alert(`不支持的文件类型: ${file.type || '未知'}。请选择 JPG、PNG、GIF 格式的图片文件，或 CSV 数据文件。\n文件名: ${file.name}`);
-        console.warn(`Unsupported file type: ${file.type}, file name: ${file.name}`);
-      }
+      setExcludedColorKeys(new Set());
+      void processFile(file);
     }
     // 重置文件输入框的值，这样用户可以重新选择同一个文件
     if (event.target) {
@@ -530,26 +551,8 @@ export default function Home() {
     try {
       if (event.dataTransfer.files && event.dataTransfer.files[0]) {
         const file = event.dataTransfer.files[0];
-        
-        // 使用与handleFileChange相同的文件类型检查逻辑
-        const fileName = file.name.toLowerCase();
-        const fileType = file.type.toLowerCase();
-        
-        // 支持的图片类型
-        const supportedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-        // 支持的CSV MIME类型（不同浏览器可能返回不同的MIME类型）
-        const supportedCsvTypes = ['text/csv', 'application/csv', 'text/plain'];
-
-        const isImageFile = supportedImageTypes.includes(fileType) || fileType.startsWith('image/');
-        const isCsvFile = supportedCsvTypes.includes(fileType) || fileName.endsWith('.csv');
-
-        if (isImageFile || isCsvFile) {
-          setExcludedColorKeys(new Set()); // ++ 重置排除列表 ++
-          processFile(file);
-        } else {
-          alert(`不支持的文件类型: ${file.type || '未知'}。请拖放 JPG、PNG、GIF 格式的图片文件，或 CSV 数据文件。\n文件名: ${file.name}`);
-          console.warn(`Unsupported file type: ${file.type}, file name: ${file.name}`);
-        }
+        setExcludedColorKeys(new Set());
+        void processFile(file);
       }
     } catch (error) {
       console.error("处理拖拽文件时发生错误:", error);
@@ -598,7 +601,9 @@ export default function Home() {
     return canvas.toDataURL('image/png');
   };
 
-  const processFile = (file: File) => {
+  const processFile = async (file: File): Promise<void> => {
+    const importTaskId = ++imageImportTaskIdRef.current;
+    setImportError(null);
     // 检查文件类型
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
     
@@ -612,6 +617,8 @@ export default function Home() {
           // 设置导入的数据
           setMappedPixelData(mappedPixelData);
           setGridDimensions(gridDimensions);
+          setSourceImageDimensions(null);
+          setImageTransform(null);
           setOriginalImageSrc(null); // CSV导入时没有原始图片
           
           // 计算颜色统计
@@ -641,7 +648,10 @@ export default function Home() {
           
           // 根据mappedPixelData生成合成的originalImageSrc
           const syntheticImageSrc = generateSyntheticImageFromPixelData(mappedPixelData, gridDimensions);
-          
+          if (activeImageObjectUrlRef.current) {
+            URL.revokeObjectURL(activeImageObjectUrlRef.current);
+            activeImageObjectUrlRef.current = null;
+          }
           setOriginalImageSrc(syntheticImageSrc);
           
           // 重置状态
@@ -675,37 +685,35 @@ export default function Home() {
         setRemapTrigger(prev => prev + 1); // Trigger full remap for new image
       };
 
-      const isGif = file.type === 'image/gif' || file.name.toLowerCase().endsWith('.gif');
+      try {
+        const validated = await validateAndDecodeBrowserImageFile(file);
+        if (importTaskId !== imageImportTaskIdRef.current) return;
 
-      if (isGif) {
-        // GIF 走 createImageBitmap，规范保证返回首帧（default image），再烘焙为 PNG dataURL
-        createImageBitmap(file)
-          .then((bitmap) => {
-            const canvas = document.createElement('canvas');
-            canvas.width = bitmap.width;
-            canvas.height = bitmap.height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) throw new Error('无法创建 Canvas 上下文');
-            ctx.drawImage(bitmap, 0, 0);
-            bitmap.close();
-            applyImageSrc(canvas.toDataURL('image/png'));
-          })
-          .catch((error) => {
-            console.error('GIF 处理失败:', error);
-            alert('无法读取 GIF 文件。');
-            setInitialGridColorKeys(new Set());
-          });
-      } else {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          applyImageSrc(e.target?.result as string);
-        };
-        reader.onerror = () => {
-          console.error("文件读取失败");
-          alert("无法读取文件。");
-          setInitialGridColorKeys(new Set()); // ++ 重置初始键 ++
-        };
-        reader.readAsDataURL(file);
+        const nextTransform = createDefaultImageTransform(validated.width, validated.height);
+        const defaultGridWidth = 100;
+        const defaultGridHeight = Math.max(
+          10,
+          Math.min(300, Math.round(defaultGridWidth * (validated.height / validated.width))),
+        );
+        setSourceImageDimensions({ width: validated.width, height: validated.height });
+        setImageTransform(nextTransform);
+        setGridHeight(defaultGridHeight);
+        setGridHeightInput(defaultGridHeight.toString());
+
+        const objectUrl = URL.createObjectURL(file);
+        if (activeImageObjectUrlRef.current) {
+          URL.revokeObjectURL(activeImageObjectUrlRef.current);
+        }
+        activeImageObjectUrlRef.current = objectUrl;
+        applyImageSrc(objectUrl);
+      } catch (error) {
+        if (importTaskId !== imageImportTaskIdRef.current) return;
+        const message =
+          error instanceof ImageImportError
+            ? error.userMessage
+            : '无法读取图片，请确认文件未损坏后重试。';
+        setImportError(message);
+        setInitialGridColorKeys(new Set());
       }
       // ++ Reset manual coloring mode when a new file is processed ++
       setIsManualColoringMode(false);
@@ -742,6 +750,45 @@ export default function Home() {
     setGranularityInput(event.target.value);
   };
 
+  const handleGridHeightInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setGridHeightInput(event.target.value);
+  };
+
+  const transformedAspectRatio = useMemo(() => {
+    if (!imageTransform) return sourceImageDimensions
+      ? sourceImageDimensions.height / sourceImageDimensions.width
+      : 1;
+    const swapsAxes = imageTransform.rotation === 90 || imageTransform.rotation === 270;
+    const width = swapsAxes ? imageTransform.crop.height : imageTransform.crop.width;
+    const height = swapsAxes ? imageTransform.crop.width : imageTransform.crop.height;
+    return height / width;
+  }, [imageTransform, sourceImageDimensions]);
+
+  const handleImageTransformChange = (settings: ImageTransformSettings) => {
+    if (!sourceImageDimensions) return;
+    const x = Math.max(0, Math.min(sourceImageDimensions.width - 1, Math.round(settings.crop.x) || 0));
+    const y = Math.max(0, Math.min(sourceImageDimensions.height - 1, Math.round(settings.crop.y) || 0));
+    const width = Math.max(1, Math.min(sourceImageDimensions.width - x, Math.round(settings.crop.width) || 1));
+    const height = Math.max(1, Math.min(sourceImageDimensions.height - y, Math.round(settings.crop.height) || 1));
+    const normalizedSettings: ImageTransformSettings = {
+      ...settings,
+      crop: { x, y, width, height },
+      scale: Math.max(0.25, Math.min(3, Number.isFinite(settings.scale) ? settings.scale : 1)),
+      offsetX: Math.round(settings.offsetX) || 0,
+      offsetY: Math.round(settings.offsetY) || 0,
+    };
+    setImageTransform(normalizedSettings);
+    if (lockGridAspectRatio) {
+      const swapsAxes = normalizedSettings.rotation === 90 || normalizedSettings.rotation === 270;
+      const transformedWidth = swapsAxes ? normalizedSettings.crop.height : normalizedSettings.crop.width;
+      const transformedHeight = swapsAxes ? normalizedSettings.crop.width : normalizedSettings.crop.height;
+      const nextHeight = Math.max(10, Math.min(300, Math.round(granularity * (transformedHeight / transformedWidth))));
+      setGridHeight(nextHeight);
+      setGridHeightInput(nextHeight.toString());
+    }
+    setRemapTrigger((previous) => previous + 1);
+  };
+
   // ++ 添加：处理相似度输入框变化的函数 ++
   const handleSimilarityThresholdInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     setSimilarityThresholdInput(event.target.value);
@@ -760,9 +807,19 @@ export default function Home() {
       newGranularity = maxGranularity;
     }
 
+    let newGridHeight = parseInt(gridHeightInput, 10);
+    if (lockGridAspectRatio) {
+      newGridHeight = Math.round(newGranularity * transformedAspectRatio);
+    }
+    if (isNaN(newGridHeight) || newGridHeight < minGranularity) {
+      newGridHeight = minGranularity;
+    } else if (newGridHeight > maxGranularity) {
+      newGridHeight = maxGranularity;
+    }
+
     // 处理相似度阈值
     const minSimilarity = 0;
-    const maxSimilarity = 100;
+    const maxSimilarity = 30;
     let newSimilarity = parseInt(similarityThresholdInput, 10);
     
     if (isNaN(newSimilarity) || newSimilarity < minSimilarity) {
@@ -773,11 +830,15 @@ export default function Home() {
 
     // 检查值是否有变化
     const granularityChanged = newGranularity !== granularity;
+    const gridHeightChanged = newGridHeight !== gridHeight;
     const similarityChanged = newSimilarity !== similarityThreshold;
     
     if (granularityChanged) {
       console.log(`Confirming new granularity: ${newGranularity}`);
       setGranularity(newGranularity);
+    }
+    if (gridHeightChanged) {
+      setGridHeight(newGridHeight);
     }
     
     if (similarityChanged) {
@@ -786,7 +847,7 @@ export default function Home() {
     }
     
     // 只有在有值变化时才触发重映射
-    if (granularityChanged || similarityChanged) {
+    if (granularityChanged || gridHeightChanged || similarityChanged) {
       setRemapTrigger(prev => prev + 1);
       // 退出手动上色模式
       setIsManualColoringMode(false);
@@ -795,6 +856,7 @@ export default function Home() {
 
     // 始终同步输入框的值
     setGranularityInput(newGranularity.toString());
+    setGridHeightInput(newGridHeight.toString());
     setSimilarityThresholdInput(newSimilarity.toString());
   };
 
@@ -812,238 +874,222 @@ export default function Home() {
   };
 
   // 修改pixelateImage函数接收模式参数
-  const pixelateImage = (imageSrc: string, detailLevel: number, threshold: number, currentPalette: PaletteColor[], mode: PixelationMode) => {
-    console.log(`Attempting to pixelate with detail: ${detailLevel}, threshold: ${threshold}, mode: ${mode}`);
+  const pixelateImage = (
+    imageSrc: string,
+    detailLevel: number,
+    targetGridHeight: number,
+    threshold: number,
+    currentPalette: PaletteColor[],
+    mode: PixelationMode,
+    transformSettings: ImageTransformSettings | null,
+  ) => {
+    const requestId = ++generationRequestIdRef.current;
     const originalCanvas = originalCanvasRef.current;
     const pixelatedCanvas = pixelatedCanvasRef.current;
-
-    if (!originalCanvas || !pixelatedCanvas) { console.error("Canvas ref(s) not available."); return; }
-    const originalCtx = originalCanvas.getContext('2d', { willReadFrequently: true });
-    const pixelatedCtx = pixelatedCanvas.getContext('2d');
-    if (!originalCtx || !pixelatedCtx) { console.error("Canvas context(s) not found."); return; }
-    console.log("Canvas contexts obtained.");
+    if (!originalCanvas || !pixelatedCanvas) return;
 
     if (currentPalette.length === 0) {
-        console.error("Cannot pixelate: The selected color palette is empty (likely due to exclusions).");
-        alert("错误：当前可用颜色板为空（可能所有颜色都被排除了），无法处理图像。请尝试恢复部分颜色。");
-        // Clear previous results visually
-        pixelatedCtx.clearRect(0, 0, pixelatedCanvas.width, pixelatedCanvas.height);
-        setMappedPixelData(null);
-        setGridDimensions(null);
-        // Keep colorCounts potentially showing the last valid counts? Or clear them too?
-        // setColorCounts(null); // Decide if clearing counts is desired when palette is empty
-        // setTotalBeadCount(0);
-        return; // Stop processing
+      setGenerationStatus({
+        state: 'error',
+        completed: 0,
+        total: 0,
+        message: '调色板为空，请至少恢复一种可用颜色。',
+      });
+      setMappedPixelData(null);
+      setGridDimensions(null);
+      return;
     }
-    const t1FallbackColor = currentPalette.find(p => p.key === 'T1')
-                         || currentPalette.find(p => p.hex.toUpperCase() === '#FFFFFF')
-                         || currentPalette[0]; // 使用第一个可用颜色作为备用
-    console.log("Using fallback color for empty cells:", t1FallbackColor);
 
-    const img = new window.Image();
-    
-    img.onerror = (error: Event | string) => {
-      console.error("Image loading failed:", error); 
-      alert("无法加载图片。");
-      setOriginalImageSrc(null); 
-      setMappedPixelData(null); 
-      setGridDimensions(null); 
-      setColorCounts(null); 
-      setInitialGridColorKeys(new Set());
+    const image = new window.Image();
+    image.onerror = () => {
+      if (requestId !== generationRequestIdRef.current) return;
+      setGenerationStatus({
+        state: 'error',
+        completed: 0,
+        total: 0,
+        message: '无法加载图片，请重新选择文件。',
+      });
     };
-    
-    img.onload = () => {
-      console.log("Image loaded successfully.");
-      const aspectRatio = img.height / img.width;
-      const N = detailLevel;
-      const M = Math.max(1, Math.round(N * aspectRatio));
-      if (N <= 0 || M <= 0) { console.error("Invalid grid dimensions:", { N, M }); return; }
-      console.log(`Grid size: ${N}x${M}`);
 
-      // 动态调整画布尺寸：当格子数量大于100时，增加画布尺寸以保持每个格子的可见性
-      const baseWidth = 500;
-      const minCellSize = 4; // 每个格子的最小尺寸（像素）
-      const recommendedCellSize = 6; // 推荐的格子尺寸（像素）
-      
-      let outputWidth = baseWidth;
-      
-      // 如果格子数量大于100，计算需要的画布宽度
-      if (N > 100) {
-        const requiredWidthForMinSize = N * minCellSize;
-        const requiredWidthForRecommendedSize = N * recommendedCellSize;
-        
-        // 使用推荐尺寸，但不超过屏幕宽度的90%（最大1200px）
-        const maxWidth = Math.min(1200, window.innerWidth * 0.9);
-        outputWidth = Math.min(maxWidth, Math.max(baseWidth, requiredWidthForRecommendedSize));
-        
-        // 确保不小于最小要求
-        outputWidth = Math.max(outputWidth, requiredWidthForMinSize);
-        
-        console.log(`Large grid detected (${N} columns). Adjusted canvas width from ${baseWidth} to ${outputWidth}px (cell size: ${Math.round(outputWidth / N)}px)`);
-      }
-      
-      const outputHeight = Math.round(outputWidth * aspectRatio);
-      
-      // 在控制台提示用户画布尺寸变化
-      if (N > 100) {
-        console.log(`💡 由于格子数量较多 (${N}x${M})，画布已自动放大以保持清晰度。可以使用水平滚动查看完整图像。`);
-      }
-      originalCanvas.width = img.width; originalCanvas.height = img.height;
-      pixelatedCanvas.width = outputWidth; pixelatedCanvas.height = outputHeight;
-      console.log(`Canvas dimensions: Original ${img.width}x${img.height}, Output ${outputWidth}x${outputHeight}`);
-
-      originalCtx.drawImage(img, 0, 0, img.width, img.height);
-      console.log("Original image drawn.");
-
-      // 1. 使用calculatePixelGrid进行初始颜色映射
-      console.log("Starting initial color mapping using calculatePixelGrid...");
-      const initialMappedData = calculatePixelGrid(
-          originalCtx,
-          img.width,
-          img.height,
-          N,
-          M,
-          currentPalette, 
-          mode,
-          t1FallbackColor
-      );
-      console.log(`Initial data mapping complete using mode ${mode}. Starting global color merging...`);
-
-      // --- 新的全局颜色合并逻辑 ---
-      const keyToRgbMap = new Map<string, RgbColor>();
-      const keyToColorDataMap = new Map<string, PaletteColor>();
-      currentPalette.forEach(p => {
-        keyToRgbMap.set(p.key, p.rgb);
-        keyToColorDataMap.set(p.key, p);
-      });
-
-      // 2. 统计初始颜色数量
-      const initialColorCounts: { [key: string]: number } = {};
-      initialMappedData.flat().forEach(cell => {
-          if (cell && cell.key && !cell.isExternal && cell.key !== TRANSPARENT_KEY) {
-              initialColorCounts[cell.key] = (initialColorCounts[cell.key] || 0) + 1;
-          }
-      });
-      console.log("Initial color counts:", initialColorCounts);
-
-      // 3. 创建一个颜色排序列表，按出现频率从高到低排序
-      const colorsByFrequency = Object.entries(initialColorCounts)
-          .sort((a, b) => b[1] - a[1])  // 按频率降序排序
-          .map(entry => entry[0]);      // 只保留颜色键
-      
-      if (colorsByFrequency.length === 0) {
-          console.log("No non-background colors found! Skipping merging.");
-      }
-
-      console.log("Colors sorted by frequency:", colorsByFrequency);
-      
-      // 4. 复制初始数据，准备合并
-      const mergedData: MappedPixel[][] = initialMappedData.map(row => 
-          row.map(cell => ({ ...cell, isExternal: cell.isExternal ?? false }))
-      );
-      
-      // 5. 处理相似颜色合并
-      const similarityThresholdValue = threshold;
-      
-      // 已被合并（替换）的颜色集合
-      const replacedColors = new Set<string>();
-      
-      // 对每个颜色按频率从高到低处理
-      for (let i = 0; i < colorsByFrequency.length; i++) {
-          const currentKey = colorsByFrequency[i];
-          
-          // 如果当前颜色已经被合并到更频繁的颜色中，跳过
-          if (replacedColors.has(currentKey)) continue;
-          
-          const currentRgb = keyToRgbMap.get(currentKey);
-          if (!currentRgb) {
-              console.warn(`RGB not found for key ${currentKey}. Skipping.`);
-              continue;
-          }
-          
-          // 检查剩余的低频颜色
-          for (let j = i + 1; j < colorsByFrequency.length; j++) {
-              const lowerFreqKey = colorsByFrequency[j];
-              
-              // 如果低频颜色已被替换，跳过
-              if (replacedColors.has(lowerFreqKey)) continue;
-              
-              const lowerFreqRgb = keyToRgbMap.get(lowerFreqKey);
-              if (!lowerFreqRgb) {
-                  console.warn(`RGB not found for key ${lowerFreqKey}. Skipping.`);
-                  continue;
-              }
-              
-              // 计算颜色距离
-              const dist = colorDistance(currentRgb, lowerFreqRgb);
-              
-              // 如果距离小于阈值，将低频颜色替换为高频颜色
-              if (dist < similarityThresholdValue) {
-                  console.log(`Merging color ${lowerFreqKey} into ${currentKey} (Distance: ${dist.toFixed(2)})`);
-                  
-                  // 标记这个颜色已被替换
-                  replacedColors.add(lowerFreqKey);
-                  
-                  // 替换所有使用这个低频颜色的单元格
-                  for (let r = 0; r < M; r++) {
-                      for (let c = 0; c < N; c++) {
-                          if (mergedData[r][c].key === lowerFreqKey) {
-                              const colorData = keyToColorDataMap.get(currentKey);
-                              if (colorData) {
-                                  mergedData[r][c] = {
-                                      key: currentKey,
-                                      color: colorData.hex,
-                                      isExternal: false
-                                  };
-                              }
-                          }
-                      }
-                  }
-              }
-          }
-      }
-      
-      if (replacedColors.size > 0) {
-          console.log(`Merged ${replacedColors.size} less frequent similar colors into more frequent ones.`);
-      } else {
-          console.log("No colors were similar enough to merge.");
-      }
-      // --- 结束新的全局颜色合并逻辑 ---
-
-      // --- 绘制和状态更新 ---
-      if (pixelatedCanvasRef.current) {
-        setMappedPixelData(mergedData);
-        setGridDimensions({ N, M });
-
-        const counts: { [key: string]: { count: number; color: string } } = {};
-        let totalCount = 0;
-        mergedData.flat().forEach(cell => {
-          if (cell && cell.key && !cell.isExternal) {
-            // 使用hex值作为统计键值，而不是色号
-            const hexKey = cell.color;
-            if (!counts[hexKey]) {
-              counts[hexKey] = { count: 0, color: cell.color };
-            }
-            counts[hexKey].count++;
-            totalCount++;
-          }
+    image.onload = () => {
+      if (requestId !== generationRequestIdRef.current) return;
+      const context = originalCanvas.getContext('2d');
+      if (!context) {
+        setGenerationStatus({
+          state: 'error',
+          completed: 0,
+          total: 0,
+          message: '浏览器无法创建图片处理画布。',
         });
-        setColorCounts(counts);
-        setTotalBeadCount(totalCount);
-        setInitialGridColorKeys(new Set(Object.keys(counts)));
-        console.log("Color counts updated based on merged data (after merging):", counts);
-        console.log("Total bead count (total beads):", totalCount);
-        console.log("Stored initial grid color keys:", Object.keys(counts));
-      } else {
-        console.error("Pixelated canvas ref is null, skipping draw call in pixelateImage.");
+        return;
       }
-    }; // 正确闭合 img.onload 函数
-    
-    console.log("Setting image source...");
-    img.src = imageSrc;
-    setIsManualColoringMode(false);
-    setSelectedColor(null);
-  }; // 正确闭合 pixelateImage 函数
+
+      originalCanvas.width = image.width;
+      originalCanvas.height = image.height;
+      context.drawImage(image, 0, 0, image.width, image.height);
+      const sourceImageData = context.getImageData(0, 0, image.width, image.height);
+      const imageBuffer = sourceImageData.data.slice().buffer as ArrayBuffer;
+      const paletteVersion = currentPalette
+        .map((color, index) =>
+          [index, color.key, color.hex, color.rgb.r, color.rgb.g, color.rgb.b].join(':'),
+        )
+        .join('|');
+      const generationMode: Record<PixelationMode, GenerationMode> = {
+        [PixelationMode.Dominant]: 'cartoon',
+        [PixelationMode.Average]: 'realistic',
+        [PixelationMode.Limited]: 'limited',
+        [PixelationMode.Dither]: 'dither',
+      };
+
+      setGenerationStatus({
+        state: 'running',
+        completed: 0,
+        total: targetGridHeight,
+      });
+      const client = generatorClientRef.current ?? new GeneratorClient();
+      generatorClientRef.current = client;
+
+      void client
+        .generate(
+          {
+            image: {
+              width: image.width,
+              height: image.height,
+              buffer: imageBuffer,
+            },
+            transform:
+              transformSettings ?? createDefaultImageTransform(image.width, image.height),
+            palette: {
+              id: 'pindou-ui-palette',
+              version: paletteVersion,
+              colors: currentPalette.map((color, index) => ({
+                id: [color.key, color.hex, index].join(':'),
+                hex: color.hex,
+                rgb: color.rgb,
+              })),
+            },
+            settings: {
+              gridWidth: detailLevel,
+              gridHeight: targetGridHeight,
+              mode: generationMode[mode],
+              maximumColors: Math.max(
+                1,
+                Math.min(maximumColors, currentPalette.length),
+              ),
+              similarColorDeltaE: threshold,
+              minimumRegionSize,
+              cleanupPasses: minimumRegionSize > 1 ? 2 : 0,
+              alphaThreshold: 128,
+            },
+          },
+          {
+            onProgress: (completed, total) => {
+              if (requestId !== generationRequestIdRef.current) return;
+              setGenerationStatus({ state: 'running', completed, total });
+            },
+          },
+        )
+        .then((result) => {
+          if (requestId !== generationRequestIdRef.current) return;
+
+          originalCanvas.width = result.processedImage.width;
+          originalCanvas.height = result.processedImage.height;
+          const processedContext = originalCanvas.getContext('2d');
+          processedContext?.putImageData(
+            new ImageData(
+              result.processedImage.data,
+              result.processedImage.width,
+              result.processedImage.height,
+            ),
+            0,
+            0,
+          );
+
+          const baseWidth = 500;
+          const minimumCellSize = 4;
+          const recommendedCellSize = 6;
+          let outputWidth = baseWidth;
+          if (result.grid.width > 100) {
+            const maximumWidth = Math.min(1200, window.innerWidth * 0.9);
+            outputWidth = Math.max(
+              result.grid.width * minimumCellSize,
+              Math.min(
+                maximumWidth,
+                Math.max(baseWidth, result.grid.width * recommendedCellSize),
+              ),
+            );
+          }
+          pixelatedCanvas.width = outputWidth;
+          pixelatedCanvas.height = Math.round(
+            outputWidth * (result.grid.height / result.grid.width),
+          );
+
+          const mappedData: MappedPixel[][] = Array.from(
+            { length: result.grid.height },
+            (_, row) =>
+              Array.from({ length: result.grid.width }, (_, column) => {
+                const index = row * result.grid.width + column;
+                if (result.grid.external[index]) {
+                  return { ...transparentColorData };
+                }
+                const paletteColor = currentPalette[result.grid.paletteIndexes[index]];
+                if (!paletteColor) {
+                  throw new Error('生成结果包含无效的色板索引。');
+                }
+                return { key: paletteColor.key, color: paletteColor.hex };
+              }),
+          );
+          const nextColorCounts: {
+            [key: string]: { count: number; color: string };
+          } = {};
+          let nextTotal = 0;
+          for (const row of mappedData) {
+            for (const cell of row) {
+              if (cell.isExternal) continue;
+              const existing = nextColorCounts[cell.key];
+              if (existing) existing.count += 1;
+              else nextColorCounts[cell.key] = { count: 1, color: cell.color };
+              nextTotal += 1;
+            }
+          }
+
+          setMappedPixelData(mappedData);
+          setGridDimensions({
+            N: result.grid.width,
+            M: result.grid.height,
+          });
+          setColorCounts(nextColorCounts);
+          setTotalBeadCount(nextTotal);
+          setInitialGridColorKeys(new Set(Object.keys(nextColorCounts)));
+          setGenerationStatus({
+            state: 'complete',
+            completed: result.grid.height,
+            total: result.grid.height,
+            processingMs: result.processingMs,
+          });
+        })
+        .catch((error: unknown) => {
+          if (requestId !== generationRequestIdRef.current) return;
+          if (
+            error instanceof GeneratorClientError &&
+            error.code === 'GENERATION_CANCELLED'
+          ) {
+            return;
+          }
+          setGenerationStatus({
+            state: 'error',
+            completed: 0,
+            total: 0,
+            message:
+              error instanceof Error
+                ? '生成失败：' + error.message
+                : '生成失败，请重试。',
+          });
+        });
+    };
+
+    image.src = imageSrc;
+  };
 
   // 当 remapTrigger 变化时清空撤回历史（参数调整/颜色排除/新图上传等均会触发 remap）
   useEffect(() => {
@@ -1058,12 +1104,16 @@ export default function Home() {
        const timeoutId = setTimeout(() => {
          if (originalImageSrc && originalCanvasRef.current && pixelatedCanvasRef.current && activeBeadPalette.length > 0) {
            console.log("useEffect triggered: Processing image due to src, granularity, threshold, palette selection, mode or remap trigger.");
-           pixelateImage(originalImageSrc, granularity, similarityThreshold, activeBeadPalette, pixelationMode);
+           pixelateImage(originalImageSrc, granularity, gridHeight, similarityThreshold, activeBeadPalette, pixelationMode, imageTransform);
          } else {
             console.warn("useEffect check failed inside timeout: Refs or active palette not ready/empty.");
          }
        }, 50);
-       return () => clearTimeout(timeoutId);
+       return () => {
+         clearTimeout(timeoutId);
+         generationRequestIdRef.current += 1;
+         generatorClientRef.current?.cancel();
+       };
     } else if (originalImageSrc && activeBeadPalette.length === 0) {
         console.warn("Image selected, but the active palette is empty after exclusions. Cannot process. Clearing preview.");
         const pixelatedCanvas = pixelatedCanvasRef.current;
@@ -1083,7 +1133,7 @@ export default function Home() {
         // setTotalBeadCount(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [originalImageSrc, granularity, similarityThreshold, customPaletteSelections, pixelationMode, remapTrigger]);
+  }, [originalImageSrc, granularity, gridHeight, similarityThreshold, maximumColors, minimumRegionSize, customPaletteSelections, pixelationMode, remapTrigger, imageTransform]);
 
   // 确保文件输入框引用在组件挂载后正确设置
   useEffect(() => {
@@ -2172,6 +2222,7 @@ export default function Home() {
       <main ref={mainRef} className="w-full md:max-w-4xl flex flex-col items-center space-y-5 sm:space-y-6 relative overflow-hidden">
         {/* Apply dark mode styles to the Drop Zone */}
         <div
+          data-testid="image-drop-zone"
           onDrop={handleDrop} onDragOver={handleDragOver} onDragEnter={handleDragOver}
           onClick={isMounted ? triggerFileInput : undefined}
           className={`border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 sm:p-8 text-center ${isMounted ? 'cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-800' : 'cursor-wait'} transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md`}
@@ -2184,8 +2235,14 @@ export default function Home() {
           {/* Text color */}
           <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">拖放图片到此处，或<span className="font-medium text-blue-600 dark:text-blue-400">点击选择文件</span></p>
           {/* Text color */}
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">支持 JPG, PNG, GIF 图片格式，或 CSV 数据文件</p>
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">支持 JPG、PNG、WebP 图片（最大 20 MB），或 CSV 数据文件</p>
         </div>
+
+        {importError && (
+          <div role="alert" className="w-full md:max-w-md rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+            {importError}
+          </div>
+        )}
 
         {/* Apply dark mode styles to the Tip Box */}
         {!originalImageSrc && (
@@ -2201,7 +2258,7 @@ export default function Home() {
           </div>
         )}
 
-                      <input type="file" accept="image/jpeg, image/png, image/gif, .csv, text/csv, application/csv, text/plain" onChange={handleFileChange} ref={fileInputRef} className="hidden" />
+                      <input data-testid="image-file-input" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.csv,text/csv,application/csv" onChange={handleFileChange} ref={fileInputRef} className="hidden" />
 
         {/* Controls and Output Area */}
         {originalImageSrc && (
@@ -2230,11 +2287,47 @@ export default function Home() {
                   </div>
                 </div>
 
+                <div className="flex-1">
+                  <label htmlFor="gridHeightInput" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                    纵轴切割数量 (10-300):
+                  </label>
+                  <input
+                    type="number"
+                    id="gridHeightInput"
+                    value={gridHeightInput}
+                    onChange={handleGridHeightInputChange}
+                    disabled={lockGridAspectRatio}
+                    className="w-full p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 h-9 shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 disabled:opacity-60"
+                    min="10"
+                    max="300"
+                  />
+                  <label className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={lockGridAspectRatio}
+                      onChange={(event) => {
+                        const locked = event.target.checked;
+                        setLockGridAspectRatio(locked);
+                        if (locked) {
+                          const nextHeight = Math.max(10, Math.min(300, Math.round(granularity * transformedAspectRatio)));
+                          setGridHeight(nextHeight);
+                          setGridHeightInput(nextHeight.toString());
+                          setRemapTrigger((previous) => previous + 1);
+                        }
+                      }}
+                    />
+                    锁定处理区域宽高比
+                  </label>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    目标格数：{granularityInput || 0}×{lockGridAspectRatio ? Math.max(10, Math.min(300, Math.round((Number(granularityInput) || 0) * transformedAspectRatio))) : gridHeightInput || 0}
+                  </p>
+                </div>
+
                 {/* Similarity Threshold Input */}
                 <div className="flex-1">
                     {/* Label color */}
                     <label htmlFor="similarityThresholdInput" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
-                        颜色合并阈值 (0-100):
+                        相似色合并 ΔE (0-30):
                     </label>
                     <div className="flex items-center gap-2">
                       {/* Input field styles */}
@@ -2245,10 +2338,48 @@ export default function Home() {
                         onChange={handleSimilarityThresholdInputChange}
                         className="w-full p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 h-9 shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
                         min="0"
-                        max="100"
+                        max="30"
                       />
                     </div>
                 </div>
+
+                <div className="flex-1">
+                  <label htmlFor="maximumColorsInput" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                    最大颜色数 (1-{Math.max(1, activeBeadPalette.length)}):
+                  </label>
+                  <input
+                    id="maximumColorsInput"
+                    type="number"
+                    min="1"
+                    max={Math.max(1, activeBeadPalette.length)}
+                    value={maximumColors}
+                    onChange={(event) => setMaximumColors(Math.max(1, Math.min(activeBeadPalette.length, Number(event.target.value) || 1)))}
+                    className="w-full p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm h-9 shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200"
+                  />
+                </div>
+
+                <div className="flex-1">
+                  <label htmlFor="minimumRegionSizeInput" className="block text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 sm:mb-2">
+                    最小色块 (1-12 格):
+                  </label>
+                  <input
+                    id="minimumRegionSizeInput"
+                    type="number"
+                    min="1"
+                    max="12"
+                    value={minimumRegionSize}
+                    onChange={(event) => setMinimumRegionSize(Math.max(1, Math.min(12, Number(event.target.value) || 1)))}
+                    className="w-full p-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm h-9 shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200"
+                  />
+                </div>
+
+                {sourceImageDimensions && imageTransform && (
+                  <ImageTransformControls
+                    sourceDimensions={sourceImageDimensions}
+                    settings={imageTransform}
+                    onChange={handleImageTransformChange}
+                  />
+                )}
 
                 {/* 快捷按钮 */}
                 <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
@@ -2288,6 +2419,8 @@ export default function Home() {
                     >
                       <option value={PixelationMode.Dominant} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">卡通 (主色)</option>
                       <option value={PixelationMode.Average} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">真实 (平均)</option>
+                      <option value={PixelationMode.Limited} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">少色 (主色 + 限色)</option>
+                      <option value={PixelationMode.Dither} className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-200">抖动 (Floyd–Steinberg)</option>
                     </select>
                   </div>
                 </div>
@@ -2360,7 +2493,37 @@ export default function Home() {
 
             {/* Output Section */}
             <div className="w-full md:max-w-2xl">
-              <canvas ref={originalCanvasRef} className="hidden"></canvas>
+              <div className={isManualColoringMode ? 'hidden' : 'mb-4 rounded-xl border border-gray-100 bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800'}>
+                <p className="mb-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">预处理原图</p>
+                <div className="flex justify-center overflow-auto rounded-lg bg-gray-100 p-2 dark:bg-gray-700">
+                  <canvas ref={originalCanvasRef} className="block h-auto max-h-80 max-w-full rounded" />
+                </div>
+
+                <div data-testid="generation-status" className="sm:col-span-2 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
+                  {generationStatus.state === 'running' && (
+                    <div className="flex items-center gap-3">
+                      <progress className="h-2 flex-1" max={Math.max(1, generationStatus.total)} value={generationStatus.completed} />
+                      <span>{generationStatus.completed}/{generationStatus.total}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          generationRequestIdRef.current += 1;
+                          generatorClientRef.current?.cancel();
+                          setGenerationStatus({ state: 'idle', completed: 0, total: 0, message: '生成任务已取消。' });
+                        }}
+                        className="rounded border border-blue-300 bg-white px-2 py-1 text-blue-700 dark:border-blue-700 dark:bg-gray-900 dark:text-blue-200"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  )}
+                  {generationStatus.state === 'complete' && (
+                    <span>生成完成{generationStatus.processingMs === undefined ? '' : `，Worker 耗时 ${generationStatus.processingMs.toFixed(1)} ms`}。</span>
+                  )}
+                  {generationStatus.state === 'error' && <span role="alert">{generationStatus.message}</span>}
+                  {generationStatus.state === 'idle' && <span>{generationStatus.message ?? '调整参数后会自动在后台重新生成。'}</span>}
+                </div>
+              </div>
 
               {/* ++ 手动编辑模式提示信息 ++ */}
               {isManualColoringMode && mappedPixelData && gridDimensions && (
@@ -2388,6 +2551,7 @@ export default function Home() {
               {/* Canvas Preview Container */}
               {/* Apply dark mode styles */}
               <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-md border border-gray-100 dark:border-gray-700">
+                <p className="mb-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">拼豆生成结果</p>
                 {/* 大画布提示信息 */}
                 {gridDimensions && gridDimensions.N > 100 && (
                   <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-700 dark:text-blue-300 text-center">
