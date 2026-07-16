@@ -4,6 +4,7 @@ import React, { useState, useRef, ChangeEvent, DragEvent, useEffect, useMemo, us
 import Script from 'next/script';
 import InstallPWA from '../components/InstallPWA';
 import ImageTransformControls from '../components/ImageTransformControls';
+import PatternEditorWorkspace from '../components/PatternEditorWorkspace';
 import { ImageImportError } from '../core/image/import-policy';
 import {
   createDefaultImageTransform,
@@ -54,6 +55,8 @@ const floatAnimation = `
 const sourceCodeUrl =
   process.env.NEXT_PUBLIC_SOURCE_CODE_URL ??
   'https://github.com/AngKernel/pindou-studio';
+
+const legacyEditingOverlayEnabled = false;
 
 // Helper function for sorting color keys - 保留原有实现，因为未在utils中导出
 function sortColorKeys(a: string, b: string): number {
@@ -413,6 +416,25 @@ export default function Home() {
     // 使用色相排序而不是色号排序
     return sortColorsByHue(colorData);
   }, [mappedPixelData, selectedColorSystem]);
+
+  const handleEditorDataChange = useCallback((nextData: MappedPixel[][]) => {
+    const nextCounts: { [key: string]: { count: number; color: string } } = {};
+    let nextTotal = 0;
+    for (const row of nextData) {
+      for (const cell of row) {
+        if (cell.isExternal) continue;
+        const hex = cell.color.toUpperCase();
+        const existing = nextCounts[hex];
+        if (existing) existing.count += 1;
+        else nextCounts[hex] = { count: 1, color: hex };
+        nextTotal += 1;
+      }
+    }
+    setMappedPixelData(nextData);
+    setColorCounts(nextCounts);
+    setTotalBeadCount(nextTotal);
+    setInitialGridColorKeys(new Set(Object.keys(nextCounts)));
+  }, []);
 
   // 初始化时从本地存储加载自定义色板选择
   useEffect(() => {
@@ -2492,7 +2514,7 @@ export default function Home() {
             )}
 
             {/* Output Section */}
-            <div className="w-full md:max-w-2xl">
+              <div className={isManualColoringMode ? 'w-full md:max-w-6xl' : 'w-full md:max-w-2xl'}>
               <div className={isManualColoringMode ? 'hidden' : 'mb-4 rounded-xl border border-gray-100 bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800'}>
                 <p className="mb-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">预处理原图</p>
                 <div className="flex justify-center overflow-auto rounded-lg bg-gray-100 p-2 dark:bg-gray-700">
@@ -2564,19 +2586,33 @@ export default function Home() {
                   </div>
                 )}
                  {/* Inner container background - 允许水平滚动以适应大画布 */}
-                <div className="flex justify-center mb-3 sm:mb-4 bg-gray-100 dark:bg-gray-700 p-2 rounded-lg overflow-x-auto overflow-y-hidden"
-                     style={{ minHeight: '150px' }}>
-                  {/* PixelatedPreviewCanvas component needs internal changes for dark mode drawing */}
-                  <PixelatedPreviewCanvas
-                    canvasRef={pixelatedCanvasRef}
-                    mappedPixelData={mappedPixelData}
-                    gridDimensions={gridDimensions}
-                    isManualColoringMode={isManualColoringMode}
-                    onInteraction={handleCanvasInteraction}
-                    highlightColorKey={highlightColorKey}
-                    onHighlightComplete={handleHighlightComplete}
-                  />
-                </div>
+                 {isManualColoringMode && mappedPixelData && gridDimensions ? (
+                   <PatternEditorWorkspace
+                     key={`${originalImageSrc}-${gridDimensions.N}x${gridDimensions.M}`}
+                     initialData={mappedPixelData}
+                     gridDimensions={gridDimensions}
+                     palette={activeBeadPalette}
+                     originalImageSrc={originalImageSrc}
+                     onChange={handleEditorDataChange}
+                     onExit={() => {
+                       setIsManualColoringMode(false);
+                       setSelectedColor(null);
+                       setTooltipData(null);
+                     }}
+                   />
+                 ) : (
+                   <div className="flex justify-center mb-3 sm:mb-4 bg-gray-100 dark:bg-gray-700 p-2 rounded-lg overflow-x-auto overflow-y-hidden" style={{ minHeight: '150px' }}>
+                     <PixelatedPreviewCanvas
+                       canvasRef={pixelatedCanvasRef}
+                       mappedPixelData={mappedPixelData}
+                       gridDimensions={gridDimensions}
+                       isManualColoringMode={false}
+                       onInteraction={handleCanvasInteraction}
+                       highlightColorKey={highlightColorKey}
+                       onHighlightComplete={handleHighlightComplete}
+                     />
+                   </div>
+                 )}
               </div>
             </div>
           </div> // This closes the main div started after originalImageSrc check
@@ -2788,7 +2824,7 @@ export default function Home() {
       </main>
 
       {/* 悬浮工具栏 */}
-      <FloatingToolbar
+      {legacyEditingOverlayEnabled && <FloatingToolbar
         isManualColoringMode={isManualColoringMode}
         isPaletteOpen={isFloatingPaletteOpen}
         onTogglePalette={() => setIsFloatingPaletteOpen(!isFloatingPaletteOpen)}
@@ -2808,10 +2844,10 @@ export default function Home() {
         }}
         onToggleMagnifier={handleToggleMagnifier}
         isMagnifierActive={isMagnifierActive}
-      />
+      />}
 
       {/* 悬浮调色盘 */}
-      {isManualColoringMode && (
+      {legacyEditingOverlayEnabled && isManualColoringMode && (
         <FloatingColorPalette
           colors={currentGridColors}
           selectedColor={selectedColor}
@@ -2836,7 +2872,7 @@ export default function Home() {
       )}
 
       {/* 放大镜工具 */}
-      {isManualColoringMode && (
+      {legacyEditingOverlayEnabled && isManualColoringMode && (
         <>
           <MagnifierTool
             isActive={isMagnifierActive}

@@ -56,7 +56,7 @@ ${rows.join('\n')}
 
 if (process.argv.includes('--check')) {
   const existing = await readFile(outputPath, 'utf8').catch(() => '');
-  if (existing !== content) {
+  if (existing.replaceAll('\r\n', '\n') !== content) {
     console.error('第三方许可证清单已过期；请运行 npm run licenses:generate。');
     process.exit(1);
   }
