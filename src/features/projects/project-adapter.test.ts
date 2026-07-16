@@ -4,8 +4,8 @@ import { createProjectFromWorkspace, restoreProjectToWorkspace } from './project
 describe('workspace project adapter', () => {
   it('embeds the used palette and restores external cells without loss', () => {
     const mappedPixelData = [
-      [{ key: 'A1', color: '#FFFFFF' }, { key: 'A2', color: '#000000' }],
-      [{ key: 'ERASE', color: '#FFFFFF', isExternal: true }, { key: 'A1', color: '#FFFFFF' }],
+      [{ key: 'T01', color: '#FFFFFF' }, { key: 'H07', color: '#000000' }],
+      [{ key: 'ERASE', color: '#FFFFFF', isExternal: true }, { key: 'T01', color: '#FFFFFF' }],
     ];
     const project = createProjectFromWorkspace({
       id: '11111111-1111-4111-8111-111111111111',
@@ -19,6 +19,7 @@ describe('workspace project adapter', () => {
     });
 
     expect(project.palette.colors).toHaveLength(2);
+    expect(project.palette.colors[0]).toMatchObject({ code: 'T01', name: '未提供（色号 T01）' });
     expect([...project.cells]).toEqual([0, 1, 0, 0]);
     expect([...project.external]).toEqual([0, 0, 1, 0]);
     expect(restoreProjectToWorkspace(project)).toEqual({

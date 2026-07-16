@@ -5,6 +5,7 @@ import {
   type ProjectPaletteColor,
 } from '../../core/project';
 import type { ColorSystem, MappedPixel } from '../../utils/pixelation';
+import { getColorKeyByHex } from '../../utils/colorSystemUtils';
 
 export const PROJECT_APP_VERSION = '0.1.0';
 export const DEFAULT_BOARD = { width: 29, height: 29, beadDiameterMm: 5 } as const;
@@ -64,12 +65,14 @@ export function createProjectFromWorkspace(input: WorkspaceProjectInput): Patter
       if (cell.isExternal) continue;
       const hex = normalizeHex(cell.color);
       if (!indexByHex.has(hex)) {
+        const mappedCode = getColorKeyByHex(hex, input.paletteId);
+        const code = mappedCode === '?' ? cell.key || hex : mappedCode;
         indexByHex.set(hex, palette.length);
         palette.push({
           id: hex,
           brand: input.paletteId,
-          code: cell.key || '?',
-          name: cell.key || hex,
+          code,
+          name: `未提供（色号 ${code}）`,
           rgb: rgbFromHex(hex),
         });
       }

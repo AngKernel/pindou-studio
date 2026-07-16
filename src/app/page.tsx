@@ -7,6 +7,7 @@ import ImageTransformControls from '../components/ImageTransformControls';
 import PatternEditorWorkspace from '../components/PatternEditorWorkspace';
 import LocalProjectsPanel from '../components/LocalProjectsPanel';
 import BoardSettingsPanel from '../components/BoardSettingsPanel';
+import ExportPanel from '../components/ExportPanel';
 import type { BoardSettings } from '../core/board';
 import { ImageImportError } from '../core/image/import-policy';
 import {
@@ -39,10 +40,7 @@ import {
   findClosestPaletteColor
 } from '../utils/pixelation';
 
-// 导入新的类型和组件
-import { GridDownloadOptions } from '../types/downloadTypes';
-import DownloadSettingsModal, { gridLineColorOptions } from '../components/DownloadSettingsModal';
-import { downloadImage, importCsvData } from '../utils/imageDownloader';
+import { importCsvData } from '../utils/imageDownloader';
 
 import { 
   colorSystemOptions, 
@@ -171,18 +169,6 @@ export default function Home() {
   const [isCustomPaletteEditorOpen, setIsCustomPaletteEditorOpen] = useState<boolean>(false);
   const [isCustomPalette, setIsCustomPalette] = useState<boolean>(false);
   
-  // ++ 新增：下载设置相关状态 ++
-  const [isDownloadSettingsOpen, setIsDownloadSettingsOpen] = useState<boolean>(false);
-  const [downloadOptions, setDownloadOptions] = useState<GridDownloadOptions>({
-    showGrid: true,
-    gridInterval: 10,
-    showCoordinates: true,
-    showCellNumbers: true,
-    gridLineColor: gridLineColorOptions[0].value,
-    includeStats: true, // 默认包含统计信息
-    exportCsv: false // 默认不导出CSV
-  });
-
   // 新增：高亮相关状态
   const [highlightColorKey, setHighlightColorKey] = useState<string | null>(null);
 
@@ -231,6 +217,7 @@ export default function Home() {
   // 新增：轻量提示
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
+  const [activeProjectSnapshot, setActiveProjectSnapshot] = useState<PatternProject | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeProjectName, setActiveProjectName] = useState('未命名项目');
   const [projectSaveState, setProjectSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -389,6 +376,23 @@ export default function Home() {
     projectStoreRef.current = new IndexedDbProjectStore();
     void refreshProjects();
   }, [refreshProjects]);
+
+  useEffect(() => {
+    const refreshActiveProject = () => {
+      const id = currentProjectRef.current?.id;
+      const store = projectStoreRef.current;
+      if (!id || !store) return;
+      void store.get(id).then((project) => {
+        if (!project || currentProjectRef.current?.id !== id) return;
+        currentProjectRef.current = project;
+        setActiveProjectSnapshot(project);
+      }).catch(() => {
+        setProjectMessage('返回页面后无法刷新当前项目，请重新打开项目。');
+      });
+    };
+    window.addEventListener('pageshow', refreshActiveProject);
+    return () => window.removeEventListener('pageshow', refreshActiveProject);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -659,6 +663,7 @@ export default function Home() {
       const restored = restoreProjectToWorkspace(project);
       skipNextAutosaveRef.current = true;
       currentProjectRef.current = project;
+      setActiveProjectSnapshot(project);
       setRestoredProjectMode(true);
       setActiveProjectId(project.id);
       setActiveProjectName(project.name);
@@ -691,6 +696,7 @@ export default function Home() {
       const renamed = await store.rename(id, name);
       if (activeProjectId === id) {
         currentProjectRef.current = renamed;
+        setActiveProjectSnapshot(renamed);
         setActiveProjectName(renamed.name);
       }
       setProjectMessage(null);
@@ -720,6 +726,7 @@ export default function Home() {
       await store.delete(id);
       if (activeProjectId === id) {
         currentProjectRef.current = null;
+        setActiveProjectSnapshot(null);
         setActiveProjectId(null);
         setActiveProjectName('未命名项目');
         setMappedPixelData(null);
@@ -827,6 +834,7 @@ export default function Home() {
       void store.put(project)
         .then(async () => {
           currentProjectRef.current = project;
+          setActiveProjectSnapshot(project);
           setActiveProjectId(project.id);
           setActiveProjectName(project.name);
           setProjectSaveState('saved');
@@ -858,6 +866,7 @@ export default function Home() {
     setImportError(null);
     setRestoredProjectMode(false);
     currentProjectRef.current = null;
+    setActiveProjectSnapshot(null);
     setActiveProjectId(null);
     setActiveProjectName('未命名项目');
     setProjectSaveState('idle');
@@ -1455,20 +1464,6 @@ export default function Home() {
       }
     }
   }, []); // 只在组件首次挂载时执行
-
-    // --- Download function (ensure filename includes palette) ---
-    const handleDownloadRequest = (options?: GridDownloadOptions) => {
-        // 调用移动到utils/imageDownloader.ts中的downloadImage函数
-        downloadImage({
-          mappedPixelData,
-          gridDimensions,
-          colorCounts,
-          totalBeadCount,
-          options: options || downloadOptions,
-          activeBeadPalette,
-          selectedColorSystem
-        });
-    };
 
     // --- Handler to toggle color exclusion ---
     const handleToggleExcludeColor = (hexKey: string) => {
@@ -3049,20 +3044,12 @@ export default function Home() {
             </div>
         )} {/* ++ End of RENDER Enter Manual Mode Button ++ */}
 
-        {/* ++ HIDE Download Buttons in manual mode ++ */}
+        {/* ++ HIDE Export Panel in manual mode ++ */}
         {!isManualColoringMode && originalImageSrc && mappedPixelData && (
             <div className="w-full md:max-w-2xl mt-4">
-              {/* 使用一个大按钮，现在所有的下载设置都通过弹窗控制 */}
-              <button
-                onClick={() => setIsDownloadSettingsOpen(true)}
-                disabled={!mappedPixelData || !gridDimensions || gridDimensions.N === 0 || gridDimensions.M === 0 || activeBeadPalette.length === 0}
-                className="w-full py-2.5 px-4 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm sm:text-base rounded-lg hover:from-green-600 hover:to-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg hover:translate-y-[-1px] disabled:hover:translate-y-0 disabled:hover:shadow-md"
-               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                下载拼豆图纸
-              </button>
+              <ExportPanel project={projectSaveState === 'saved' ? activeProjectSnapshot : null} />
             </div>
-        )} {/* ++ End of HIDE Download Buttons ++ */}
+        )} {/* ++ End of HIDE Export Panel ++ */}
 
          {/* Tooltip Display (Needs update in GridTooltip.tsx) */}
          {tooltipData && (
@@ -3157,15 +3144,6 @@ export default function Home() {
           Pindou Studio &copy; {new Date().getFullYear()}
         </p>
       </footer>
-
-      {/* 使用导入的下载设置弹窗组件 */}
-      <DownloadSettingsModal 
-        isOpen={isDownloadSettingsOpen}
-        onClose={() => setIsDownloadSettingsOpen(false)}
-        options={downloadOptions}
-        onOptionsChange={setDownloadOptions}
-        onDownload={handleDownloadRequest}
-      />
 
       {/* 轻量提示 Toast */}
       {toastMessage && (
