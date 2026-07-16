@@ -6,6 +6,8 @@ import InstallPWA from '../components/InstallPWA';
 import ImageTransformControls from '../components/ImageTransformControls';
 import PatternEditorWorkspace from '../components/PatternEditorWorkspace';
 import LocalProjectsPanel from '../components/LocalProjectsPanel';
+import BoardSettingsPanel from '../components/BoardSettingsPanel';
+import type { BoardSettings } from '../core/board';
 import { ImageImportError } from '../core/image/import-policy';
 import {
   MAX_PROJECT_FILE_BYTES,
@@ -24,7 +26,7 @@ import {
   GeneratorClientError,
 } from '../features/generator/generator-client';
 import { validateAndDecodeBrowserImageFile } from '../features/import/validate-browser-image';
-import { createProjectFromWorkspace, restoreProjectToWorkspace } from '../features/projects/project-adapter';
+import { createProjectFromWorkspace, DEFAULT_BOARD, restoreProjectToWorkspace } from '../features/projects/project-adapter';
 import { createProjectThumbnail } from '../features/projects/project-thumbnail';
 import { IndexedDbProjectStore, type ProjectSummary } from '../storage';
 
@@ -119,8 +121,6 @@ import MagnifierTool from '../components/MagnifierTool';
 import MagnifierSelectionOverlay from '../components/MagnifierSelectionOverlay';
 import { loadPaletteSelections, savePaletteSelections, presetToSelections, PaletteSelections } from '../utils/localStorageUtils';
 import { TRANSPARENT_KEY, transparentColorData } from '../utils/pixelEditingUtils';
-
-import FocusModePreDownloadModal from '../components/FocusModePreDownloadModal';
 
 export default function Home() {
   const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null);
@@ -217,9 +217,6 @@ export default function Home() {
   // 新增：活跃工具层级管理
   const [activeFloatingTool, setActiveFloatingTool] = useState<'palette' | 'magnifier' | null>(null);
 
-  // 新增：专心拼豆模式进入前下载提醒弹窗
-  const [isFocusModePreDownloadModalOpen, setIsFocusModePreDownloadModalOpen] = useState<boolean>(false);
-
   // 新增：编辑撤回历史栈（多步）
   interface EditSnapshot {
     mappedPixelData: MappedPixel[][];
@@ -239,6 +236,7 @@ export default function Home() {
   const [projectSaveState, setProjectSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [projectMessage, setProjectMessage] = useState<string | null>(null);
   const [restoredProjectMode, setRestoredProjectMode] = useState(false);
+  const [boardSettings, setBoardSettings] = useState<BoardSettings>(DEFAULT_BOARD);
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 2000);
@@ -537,18 +535,11 @@ export default function Home() {
 
   // 专心拼豆模式相关处理函数
   const handleEnterFocusMode = () => {
-    setIsFocusModePreDownloadModalOpen(true);
-  };
-
-  const handleProceedToFocusMode = () => {
-    // 保存数据到localStorage供专心拼豆模式使用
-    localStorage.setItem('focusMode_pixelData', JSON.stringify(mappedPixelData));
-    localStorage.setItem('focusMode_gridDimensions', JSON.stringify(gridDimensions));
-    localStorage.setItem('focusMode_colorCounts', JSON.stringify(colorCounts));
-    localStorage.setItem('focusMode_selectedColorSystem', selectedColorSystem);
-    
-    // 跳转到专心拼豆页面
-    window.location.href = '/focus';
+    if (!activeProjectId || projectSaveState !== 'saved') {
+      showToast('请等待当前项目保存完成');
+      return;
+    }
+    window.location.href = `/focus?project=${encodeURIComponent(activeProjectId)}`;
   };
 
   // 添加一个安全的文件输入触发函数
@@ -672,6 +663,7 @@ export default function Home() {
       setActiveProjectId(project.id);
       setActiveProjectName(project.name);
       setSelectedColorSystem(restored.selectedColorSystem);
+      setBoardSettings(project.board);
       setGridDimensions(restored.gridDimensions);
       handleEditorDataChange(restored.mappedPixelData);
       setSourceImageDimensions(null);
@@ -799,6 +791,7 @@ export default function Home() {
       skipNextAutosaveRef.current = false;
       return;
     }
+    setProjectSaveState('saving');
     const timeout = window.setTimeout(() => {
       const store = projectStoreRef.current;
       if (!store) return;
@@ -821,6 +814,7 @@ export default function Home() {
             maximumColors,
             minimumRegionSize,
           },
+          board: boardSettings,
           thumbnailDataUrl: createProjectThumbnail(mappedPixelData, gridDimensions.N, gridDimensions.M),
           previous,
           now,
@@ -830,7 +824,6 @@ export default function Home() {
         setProjectSaveState('error');
         return;
       }
-      setProjectSaveState('saving');
       void store.put(project)
         .then(async () => {
           currentProjectRef.current = project;
@@ -849,6 +842,7 @@ export default function Home() {
   }, [
     activeProjectId,
     activeProjectName,
+    boardSettings,
     gridDimensions,
     mappedPixelData,
     maximumColors,
@@ -867,6 +861,7 @@ export default function Home() {
     setActiveProjectId(null);
     setActiveProjectName('未命名项目');
     setProjectSaveState('idle');
+    setBoardSettings(DEFAULT_BOARD);
     // 检查文件类型
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
     
@@ -2848,6 +2843,7 @@ export default function Home() {
                      gridDimensions={gridDimensions}
                      palette={activeBeadPalette}
                      originalImageSrc={originalImageSrc}
+                     boardSettings={boardSettings}
                      onChange={handleEditorDataChange}
                      onExit={() => {
                        setIsManualColoringMode(false);
@@ -3029,6 +3025,14 @@ export default function Home() {
         {/* ++ RENDER Enter Manual Mode Button ONLY when NOT in manual mode (before downloads) ++ */}
         {!isManualColoringMode && originalImageSrc && mappedPixelData && gridDimensions && (
             <div className="w-full md:max-w-2xl mt-4 space-y-3"> {/* Wrapper div */} 
+             <BoardSettingsPanel
+               settings={boardSettings}
+               patternWidth={gridDimensions.N}
+               patternHeight={gridDimensions.M}
+               canEnterMaker={activeProjectId !== null && projectSaveState === 'saved'}
+               onChange={setBoardSettings}
+               onEnterMaker={handleEnterFocusMode}
+             />
              {/* Manual Edit Mode Button */}
              <button
                 onClick={() => {
@@ -3042,17 +3046,6 @@ export default function Home() {
                  进入手动编辑模式
              </button>
 
-             {/* Focus Mode Button */}
-             <button
-                onClick={handleEnterFocusMode}
-                className={`w-full py-2.5 px-4 text-sm sm:text-base rounded-lg transition-all duration-300 flex items-center justify-center gap-2 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white shadow-md hover:shadow-lg hover:translate-y-[-1px]`}
-              >
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                 </svg>
-                 进入专心拼豆模式（AplhaTest）
-             </button>
             </div>
         )} {/* ++ End of RENDER Enter Manual Mode Button ++ */}
 
@@ -3172,16 +3165,6 @@ export default function Home() {
         options={downloadOptions}
         onOptionsChange={setDownloadOptions}
         onDownload={handleDownloadRequest}
-      />
-
-      {/* 专心拼豆模式进入前下载提醒弹窗 */}
-      <FocusModePreDownloadModal
-        isOpen={isFocusModePreDownloadModalOpen}
-        onClose={() => setIsFocusModePreDownloadModalOpen(false)}
-        onProceedWithoutDownload={handleProceedToFocusMode}
-        mappedPixelData={mappedPixelData}
-        gridDimensions={gridDimensions}
-        selectedColorSystem={selectedColorSystem}
       />
 
       {/* 轻量提示 Toast */}

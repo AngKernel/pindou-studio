@@ -17,6 +17,7 @@ interface WorkspaceProjectInput {
   readonly height: number;
   readonly paletteId: ColorSystem;
   readonly generationSettings: Readonly<Record<string, JsonValue>>;
+  readonly board?: PatternProject['board'];
   readonly thumbnailDataUrl?: string;
   readonly previous?: PatternProject | null;
   readonly now: string;
@@ -95,6 +96,12 @@ export function createProjectFromWorkspace(input: WorkspaceProjectInput): Patter
   }
 
   const canPreserveCompleted = input.previous?.width === input.width && input.previous.height === input.height;
+  const board = input.board ?? input.previous?.board ?? DEFAULT_BOARD;
+  const boardCount = Math.ceil(input.width / board.width) * Math.ceil(input.height / board.height);
+  const previousMakerState = input.previous?.makerState ?? { activeBoardIndex: 0, lastPosition: null };
+  const lastPosition = previousMakerState.lastPosition;
+  const canPreservePosition = lastPosition !== null
+    && lastPosition.row < input.height && lastPosition.column < input.width;
   return {
     formatVersion: CURRENT_PROJECT_FORMAT_VERSION,
     appVersion: PROJECT_APP_VERSION,
@@ -110,7 +117,11 @@ export function createProjectFromWorkspace(input: WorkspaceProjectInput): Patter
     cells,
     external,
     completed: canPreserveCompleted ? input.previous!.completed.slice() : new Uint8Array(cellCount),
-    board: input.previous?.board ?? DEFAULT_BOARD,
+    board,
+    makerState: {
+      activeBoardIndex: Math.min(previousMakerState.activeBoardIndex, boardCount - 1),
+      lastPosition: canPreservePosition ? lastPosition : null,
+    },
     generationSettings: input.generationSettings,
     thumbnailDataUrl: input.thumbnailDataUrl,
     createdAt: input.previous?.createdAt ?? input.now,
