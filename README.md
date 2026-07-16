@@ -1,13 +1,10 @@
 <div align="center">
 
-# ✦ Perler Beads Generator ✦
+# ✦ Pindou Studio ✦
 
 ### 任意图片 → 拼豆底稿，一键生成
 
-[![Mobile](https://img.shields.io/badge/移动端-perlerbeadsold.zippland.com-ff69b4?style=for-the-badge)](https://perlerbeadsold.zippland.com)
-[![Desktop](https://img.shields.io/badge/桌面端-perlerbeads.zippland.com-8b5cf6?style=for-the-badge)](https://perlerbeads.zippland.com)
 [![License](https://img.shields.io/badge/License-AGPL%20v3-blue?style=for-the-badge)](./LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen?style=for-the-badge)](https://github.com/Zippland/perler-beads/pulls)
 
 开源的智能拼豆图纸生成器 — 自动颜色映射 · 多品牌色号适配 · 杂色清理 · 一键导出图纸与采购清单
 
@@ -16,6 +13,8 @@
 </div>
 
 ---
+
+本仓库基于 [Zippland/perler-beads](https://github.com/Zippland/perler-beads) 继续开发，保留完整上游历史并整体使用 AGPL-3.0。当前已完成阶段 0 的审计和工程初始化，核心产品功能仍以增量方式开发。
 
 ## 功能
 
@@ -30,14 +29,32 @@
 
 ## 快速开始
 
+要求：Node.js 22、npm 10。Node 版本记录在 `.nvmrc`。
+
 ```bash
-git clone https://github.com/Zippland/perler-beads.git
-cd perler-beads
-npm install
+npm ci
+cp .env.example .env.local # Windows 可手工复制
 npm run dev
 ```
 
 浏览器打开 `http://localhost:3000`。
+
+公开部署前必须把 `.env.local` 中的 `NEXT_PUBLIC_SOURCE_CODE_URL` 改为该部署版本对应的公开源码仓库。
+
+## 质量检查
+
+```bash
+npm run lint
+npm run typecheck
+npm run test
+npm run licenses:check
+npm run security:check
+npm run build
+```
+
+GitHub Actions 会对 push 和 pull request 执行同等门禁。
+
+`npm run audit:prod:online` 会把依赖图发送到 npm 漏洞服务，只应在知情并允许该外部请求时手动运行。基础 CI 使用本次审计建立的离线已知漏洞版本门禁。
 
 ## 技术栈
 
@@ -46,17 +63,18 @@ npm run dev
 | 框架 | Next.js (React) + TypeScript |
 | 样式 | Tailwind CSS |
 | 图像处理 | Canvas API（浏览器端） |
-| 部署 | Vercel |
+| 测试 | Vitest |
+| CI | GitHub Actions |
 
 ## 核心算法
 
 ### 1. 初始颜色映射
 
-对每个网格单元，提取原图对应区域内出现频率最高的像素 RGB 值（主导色），通过欧氏距离映射到当前色板中最接近的颜色。相比均值池化，主导色提取有效避免了色块边界处的灰色毛边问题。
+对每个网格单元提取主导色或平均色，并使用 Oklab 欧氏距离映射到当前色板。阶段 1 将按验收要求替换为 Lab + CIEDE2000，并保留现有输出作为回归基线。
 
 ### 2. 区域颜色合并
 
-使用 BFS 从未访问单元格出发，将欧氏距离小于阈值的邻近单元格聚合为连通区域，统一设置为区域内出现次数最多的色号。该步骤显著减少杂色，提升色块纯净度。
+现有实现按颜色全局出现频率合并距离小于阈值的低频色。该算法可用作原型，但还没有最小连通区、孤立像素和轮廓保护；这些内容列入阶段 1 重构。
 
 ### 3. 背景移除
 
@@ -88,9 +106,11 @@ npm run dev
 4. 推送到分支 (`git push origin feature/your-feature`)
 5. 创建 Pull Request
 
+提交前请确保上述六项质量检查全部通过。
+
 ## 共创声明
 
-本项目永久开源，由维护者无偿运营 [perlerbeadsold.zippland.com](https://perlerbeadsold.zippland.com) 供所有拼豆爱好者免费使用。
+上游项目永久开源，并由原维护者运营相关站点。本衍生项目保留其作者和社区声明，详见 [NOTICE.md](./NOTICE.md)。
 
 我们公开全部算法细节和源代码，目的是推动拼豆工具生态的共同进步。欢迎所有人学习、使用、改进。
 
@@ -98,4 +118,4 @@ npm run dev
 
 ## 许可证
 
-[AGPL-3.0](./LICENSE) &copy; [Zippland](https://github.com/Zippland)
+[AGPL-3.0](./LICENSE)。上游来源、原作者和修改说明见 [NOTICE.md](./NOTICE.md)，第三方依赖见 [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md)。

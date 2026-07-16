@@ -1,7 +1,7 @@
 {
-  "name": "七卡瓦拼豆底稿生成器",
-  "short_name": "七卡瓦",
-  "description": "七卡瓦拼豆底稿生成器，让你轻松制作精美的像素画作品",
+  "name": "Pindou Studio 拼豆工作台",
+  "short_name": "Pindou Studio",
+  "description": "本地优先的拼豆图纸生成与编辑工具",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#E8F4FD",

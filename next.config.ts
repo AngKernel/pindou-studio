@@ -1,28 +1,30 @@
 import type { NextConfig } from "next";
+import withPWAInit from "@ducanh2912/next-pwa";
 
-const withPWA = require("next-pwa")({
+const withPWA = withPWAInit({
   dest: "public",
   register: true,
-  skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
-  buildExcludes: [/middleware-manifest\.json$/],
-  runtimeCaching: [
-    {
-      urlPattern: /^https?.*/,
-      handler: "NetworkFirst",
-      options: {
-        cacheName: "offlineCache",
-        expiration: {
-          maxEntries: 200,
-          maxAgeSeconds: 30 * 24 * 60 * 60,
+  workboxOptions: {
+    skipWaiting: true,
+    runtimeCaching: [
+      {
+        urlPattern: /\/_next\/static\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "next-static-assets",
+          expiration: {
+            maxEntries: 200,
+            maxAgeSeconds: 30 * 24 * 60 * 60,
+          },
         },
       },
-    },
-  ],
+    ],
+  },
 });
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  reactStrictMode: true,
 };
 
 export default withPWA(nextConfig);

@@ -1,5 +1,4 @@
 const sharp = require('sharp');
-const fs = require('fs');
 const path = require('path');
 
 const sizes = [192, 256, 384, 512];

@@ -1,30 +1,49 @@
 {
-  "name": "perler-beads",
+  "name": "pindou-studio",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
+  "packageManager": "npm@10.9.8",
+  "engines": {
+    "node": ">=22.0.0 <25"
+  },
+  "overrides": {
+    "brace-expansion@^1.0.0": "1.1.16",
+    "brace-expansion@^2.0.0": "2.1.2",
+    "postcss": "8.5.19",
+    "serialize-javascript": "7.0.7"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "licenses:generate": "node scripts/generate-third-party-licenses.mjs",
+    "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
+    "security:check": "node scripts/check-known-vulnerabilities.mjs",
+    "audit:prod:online": "npm audit --omit=dev --audit-level=high",
+    "ci": "npm run lint && npm run typecheck && npm run test && npm run licenses:check && npm run security:check && npm run build"
   },
   "dependencies": {
-    "@vercel/analytics": "^1.5.0",
-    "next": "15.3.6",
-    "next-pwa": "^5.6.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "@ducanh2912/next-pwa": "10.2.9",
+    "next": "15.5.20",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/node": "22.20.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
     "eslint": "^9",
-    "eslint-config-next": "15.3.6",
+    "eslint-config-next": "15.5.20",
     "sharp": "^0.34.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "4.1.10"
   }
 }
