@@ -88,6 +88,7 @@ const secretPatterns = [
   /\bgh[pousr]_[A-Za-z0-9]{30,}\b/,
   /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
 ];
+const forbiddenRuntimeDomains = ['perlerbeadsold.zippland.com'];
 const files = await textFiles(process.cwd());
 for (const file of files) {
   const source = await readFile(file, 'utf8');
@@ -95,6 +96,12 @@ for (const file of files) {
   if (matched) throw new Error(`发现疑似已提交秘密：${relative(process.cwd(), file)} (${matched.source})`);
   if (file.includes(`${join('src', '')}`) && /\b(?:ACTIVATION_HMAC_SECRET|TOKEN_SIGNING_SECRET|REFRESH_HMAC_SECRET|ADMIN_API_SECRET|DATABASE_URL)\b/.test(source)) {
     throw new Error(`公开前端包含服务端配置名称：${relative(process.cwd(), file)}`);
+  }
+  if (
+    file.includes(`${join('src', '')}`) &&
+    forbiddenRuntimeDomains.some((domain) => source.includes(domain))
+  ) {
+    throw new Error(`公开前端包含已退役的上游运行域名：${relative(process.cwd(), file)}`);
   }
 }
 console.log(`秘密与前后端配置边界检查通过（${files.length} 个文本文件）。`);
