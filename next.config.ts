@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import withPWAInit from "@ducanh2912/next-pwa";
+import { deploymentConfig } from "./src/config/deployment";
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -24,11 +25,7 @@ const withPWA = withPWAInit({
 });
 
 function contentSecurityPolicy(): string {
-  const configuredApi = process.env.NEXT_PUBLIC_BEAD_CLOUD_API_URL;
-  let apiOrigin = '';
-  if (configuredApi) {
-    try { apiOrigin = new URL(configuredApi).origin; } catch { apiOrigin = ''; }
-  }
+  const apiOrigin = deploymentConfig.beadCloudApiUrl ?? '';
   const developmentScript = process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : '';
   return [
     "default-src 'self'",

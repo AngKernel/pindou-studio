@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BeadCloudClient } from '../../api/bead-cloud-client';
+import { deploymentConfig } from '../../config/deployment';
 import { LicensingCredentialStore } from './credential-store';
 import { FREE_LICENSING_SNAPSHOT, LicensingService } from './licensing-service';
 import type { LicensingSnapshot } from './types';
@@ -18,14 +19,10 @@ interface LicensingContextValue extends LicensingSnapshot {
 const LicensingContext = createContext<LicensingContextValue | null>(null);
 
 function createService(): LicensingService {
-  const configuredUrl = process.env.NEXT_PUBLIC_BEAD_CLOUD_API_URL?.trim();
-  const baseUrl = configuredUrl || (process.env.NODE_ENV === 'development' ? 'http://127.0.0.1:8787' : undefined);
-  if (!baseUrl) return new LicensingService(null, new LicensingCredentialStore());
-  try {
-    return new LicensingService(new BeadCloudClient(baseUrl), new LicensingCredentialStore());
-  } catch {
-    return new LicensingService(null, new LicensingCredentialStore());
-  }
+  return new LicensingService(
+    new BeadCloudClient(deploymentConfig.beadCloudApiUrl!),
+    new LicensingCredentialStore(),
+  );
 }
 
 function failure(error: unknown): LicensingSnapshot {
@@ -36,7 +33,18 @@ function failure(error: unknown): LicensingSnapshot {
   };
 }
 
-export function LicensingProvider({ children }: { readonly children: ReactNode }) {
+const LOCAL_ONLY_VALUE: LicensingContextValue = {
+  ...FREE_LICENSING_SNAPSHOT,
+  message: '当前为纯前端稳定版：图片、项目和导出均在浏览器本地处理，不连接授权服务。',
+  busy: false,
+  hasEntitlement: () => false,
+  activate: async () => false,
+  refresh: async () => false,
+  deactivate: async () => false,
+  clearLocal: async () => undefined,
+};
+
+function CloudLicensingProvider({ children }: { readonly children: ReactNode }) {
   const serviceRef = useRef<LicensingService | null>(null);
   if (!serviceRef.current) serviceRef.current = createService();
   const [snapshot, setSnapshot] = useState<LicensingSnapshot>({ mode: 'loading', license: null, message: '正在检查本地设备授权…' });
@@ -78,6 +86,13 @@ export function LicensingProvider({ children }: { readonly children: ReactNode }
   }, [busy, snapshot]);
 
   return <LicensingContext.Provider value={value}>{children}</LicensingContext.Provider>;
+}
+
+export function LicensingProvider({ children }: { readonly children: ReactNode }) {
+  if (!deploymentConfig.beadCloudEnabled) {
+    return <LicensingContext.Provider value={LOCAL_ONLY_VALUE}>{children}</LicensingContext.Provider>;
+  }
+  return <CloudLicensingProvider>{children}</CloudLicensingProvider>;
 }
 
 export function useLicensing(): LicensingContextValue {
