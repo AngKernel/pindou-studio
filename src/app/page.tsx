@@ -22,6 +22,7 @@ import {
   type ImageTransformSettings,
 } from '../core/image/transform';
 import type { GenerationMode } from '../core/pattern/generate';
+import { deploymentConfig } from '../config/deployment';
 import {
   GeneratorClient,
   GeneratorClientError,
@@ -2421,10 +2422,14 @@ export default function Home() {
             <a href="/licenses" className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 font-medium transition-colors">
               开源许可
             </a>
-            <span className="text-gray-300 dark:text-gray-600">·</span>
-            <a data-testid="activation-link" href="/activation" className="text-violet-600 dark:text-violet-300 hover:text-violet-700 font-medium transition-colors">
-              内测激活
-            </a>
+            {deploymentConfig.beadCloudEnabled && (
+              <>
+                <span className="text-gray-300 dark:text-gray-600">·</span>
+                <a data-testid="activation-link" href="/activation" className="text-violet-600 dark:text-violet-300 hover:text-violet-700 font-medium transition-colors">
+                  内测激活
+                </a>
+              </>
+            )}
           </div>
           {/* 来源提示 */}
           <p className="mt-2 text-[10px] text-gray-400 dark:text-gray-500">发布平台请标注来源或保留图片水印及标识</p>

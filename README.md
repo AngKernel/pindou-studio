@@ -41,6 +41,10 @@ npm run dev
 
 公开部署前必须把 `.env.local` 中的 `NEXT_PUBLIC_SOURCE_CODE_URL` 改为该部署版本对应的公开源码仓库。
 
+默认 `NEXT_PUBLIC_DEPLOYMENT_MODE=local-only`，图片处理、项目保存和普通导出完全在浏览器本地运行，
+不配置也不会连接授权服务。仅内部云功能部署可改为 `cloud`，并同时提供 HTTPS
+`NEXT_PUBLIC_BEAD_CLOUD_API_URL`；模式与地址不一致时构建会失败。
+
 ## 质量检查
 
 ```bash
@@ -118,4 +122,4 @@ GitHub Actions 会对 push 和 pull request 执行同等门禁。
 
 ## 许可证
 
-[AGPL-3.0](./LICENSE)。上游来源、原作者和修改说明见 [NOTICE.md](./NOTICE.md)，第三方依赖见 [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md)。
+[AGPL-3.0](./LICENSE)。上游来源、原作者和修改说明见 [NOTICE.md](./NOTICE.md)，第三方依赖见 [THIRD_PARTY_LICENSES.md](./THIRD_PARTY_LICENSES.md)，公开静态资产来源见 [ASSET_PROVENANCE.md](./ASSET_PROVENANCE.md)。

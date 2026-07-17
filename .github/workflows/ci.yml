@@ -42,9 +42,12 @@ jobs:
       - name: Fixed fixture provenance and hashes
         run: npm run fixtures:check
 
+      - name: Public asset provenance and generated icons
+        run: npm run assets:check
+
       - name: Upload phase 1 regression report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: phase-1-regression-report
           path: test-results/phase1-regression.json
@@ -85,3 +88,6 @@ jobs:
 
       - name: Browser integration tests
         run: npm run test:e2e
+
+      - name: Local-only public build integration
+        run: npm run test:e2e:local-only
