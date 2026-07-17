@@ -3,8 +3,12 @@ import "./globals.css";
 import { LicensingProvider } from "../features/licensing/LicensingProvider";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://pindou.blogchen.asia/"),
   title: "Pindou Studio | 拼豆工作台",
   description: "上传图片，调整精细度，一键生成像素画图纸，简单实用的像素画生成工具",
+  alternates: {
+    canonical: "/",
+  },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
