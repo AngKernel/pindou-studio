@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useRef, ChangeEvent, DragEvent, useEffect, useMemo, useCallback } from 'react';
-import Script from 'next/script';
 import InstallPWA from '../components/InstallPWA';
 import ImageTransformControls from '../components/ImageTransformControls';
 import PatternEditorWorkspace from '../components/PatternEditorWorkspace';
@@ -30,6 +29,7 @@ import {
 import { validateAndDecodeBrowserImageFile } from '../features/import/validate-browser-image';
 import { createProjectFromWorkspace, DEFAULT_BOARD, restoreProjectToWorkspace } from '../features/projects/project-adapter';
 import { createProjectThumbnail } from '../features/projects/project-thumbnail';
+import { calculateWorkspaceColorStatistics } from '../features/projects/workspace-color-counts';
 import { IndexedDbProjectStore, type ProjectSummary } from '../storage';
 
 // 导入像素化工具和类型
@@ -148,9 +148,6 @@ export default function Home() {
   // 新增：色号系统选择状态
   const [selectedColorSystem, setSelectedColorSystem] = useState<ColorSystem>('MARD');
   
-  const [activeBeadPalette, setActiveBeadPalette] = useState<PaletteColor[]>(() => {
-      return fullBeadPalette; // 默认使用全部颜色
-  });
   // 状态变量：存储被排除的颜色（hex值）
   const [excludedColorKeys, setExcludedColorKeys] = useState<Set<string>>(new Set());
   const [showExcludedColors, setShowExcludedColors] = useState<boolean>(false);
@@ -169,6 +166,16 @@ export default function Home() {
   const [customPaletteSelections, setCustomPaletteSelections] = useState<PaletteSelections>({});
   const [isCustomPaletteEditorOpen, setIsCustomPaletteEditorOpen] = useState<boolean>(false);
   const [isCustomPalette, setIsCustomPalette] = useState<boolean>(false);
+  const activeBeadPalette = useMemo(
+    () => convertPaletteToColorSystem(
+      fullBeadPalette.filter((color) => (
+        customPaletteSelections[color.hex.toUpperCase()]
+        && !excludedColorKeys.has(color.hex.toUpperCase())
+      )),
+      selectedColorSystem,
+    ),
+    [customPaletteSelections, excludedColorKeys, selectedColorSystem],
+  );
   
   // 新增：高亮相关状态
   const [highlightColorKey, setHighlightColorKey] = useState<string | null>(null);
@@ -312,34 +319,9 @@ export default function Home() {
     saveEditSnapshot();
     setMappedPixelData(newMappedPixelData);
 
-    // 更新颜色统计
-    if (colorCounts) {
-      const newColorCounts = { ...colorCounts };
-
-      // 减少原颜色的计数
-      if (newColorCounts[oldPixel.key]) {
-        newColorCounts[oldPixel.key].count--;
-        if (newColorCounts[oldPixel.key].count === 0) {
-          delete newColorCounts[oldPixel.key];
-        }
-      }
-
-      // 增加新颜色的计数
-      if (newColorCounts[colorData.key]) {
-        newColorCounts[colorData.key].count++;
-      } else {
-        newColorCounts[colorData.key] = {
-          count: 1,
-          color: colorData.color
-        };
-      }
-
-      setColorCounts(newColorCounts);
-
-      // 更新总计数
-      const newTotal = Object.values(newColorCounts).reduce((sum, item) => sum + item.count, 0);
-      setTotalBeadCount(newTotal);
-    }
+    const statistics = calculateWorkspaceColorStatistics(newMappedPixelData);
+    setColorCounts(statistics.counts);
+    setTotalBeadCount(statistics.total);
   };
 
   const originalCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -352,6 +334,9 @@ export default function Home() {
   const projectStoreRef = useRef<IndexedDbProjectStore | null>(null);
   const currentProjectRef = useRef<PatternProject | null>(null);
   const skipNextAutosaveRef = useRef(false);
+  const autosaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const autosaveRevisionRef = useRef(0);
+  const pendingProjectIdRef = useRef<string | null>(null);
   // ++ 添加: Ref for import file input ++
   const importPaletteInputRef = useRef<HTMLInputElement>(null);
   //const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -406,19 +391,6 @@ export default function Home() {
 
   // --- Derived State ---
 
-  // Update active palette based on selection and exclusions
-  useEffect(() => {
-    const newActiveBeadPalette = fullBeadPalette.filter(color => {
-      const normalizedHex = color.hex.toUpperCase();
-      const isSelectedInCustomPalette = customPaletteSelections[normalizedHex];
-      const isNotExcluded = !excludedColorKeys.has(normalizedHex);
-      return isSelectedInCustomPalette && isNotExcluded;
-    });
-    // 根据选择的色号系统转换调色板
-    const convertedPalette = convertPaletteToColorSystem(newActiveBeadPalette, selectedColorSystem);
-    setActiveBeadPalette(convertedPalette);
-  }, [customPaletteSelections, excludedColorKeys, remapTrigger, selectedColorSystem]);
-
   // ++ 添加：当状态变化时同步更新输入框的值 ++
   useEffect(() => {
     setGranularityInput(granularity.toString());
@@ -457,22 +429,11 @@ export default function Home() {
   }, [mappedPixelData, selectedColorSystem]);
 
   const handleEditorDataChange = useCallback((nextData: MappedPixel[][]) => {
-    const nextCounts: { [key: string]: { count: number; color: string } } = {};
-    let nextTotal = 0;
-    for (const row of nextData) {
-      for (const cell of row) {
-        if (cell.isExternal) continue;
-        const hex = cell.color.toUpperCase();
-        const existing = nextCounts[hex];
-        if (existing) existing.count += 1;
-        else nextCounts[hex] = { count: 1, color: hex };
-        nextTotal += 1;
-      }
-    }
+    const statistics = calculateWorkspaceColorStatistics(nextData);
     setMappedPixelData(nextData);
-    setColorCounts(nextCounts);
-    setTotalBeadCount(nextTotal);
-    setInitialGridColorKeys(new Set(Object.keys(nextCounts)));
+    setColorCounts(statistics.counts);
+    setTotalBeadCount(statistics.total);
+    setInitialGridColorKeys(new Set(Object.keys(statistics.counts)));
   }, []);
 
   // 初始化时从本地存储加载自定义色板选择
@@ -522,19 +483,6 @@ export default function Home() {
       setIsCustomPalette(false);
     }
   }, []); // 只在组件首次加载时执行
-
-  // 更新 activeBeadPalette 基于自定义选择和排除列表
-  useEffect(() => {
-    const newActiveBeadPalette = fullBeadPalette.filter(color => {
-      const normalizedHex = color.hex.toUpperCase();
-      const isSelectedInCustomPalette = customPaletteSelections[normalizedHex];
-      // 使用hex值进行排除检查
-      const isNotExcluded = !excludedColorKeys.has(normalizedHex);
-      return isSelectedInCustomPalette && isNotExcluded;
-    });
-    // 不进行色号系统转换，保持原始的MARD色号和hex值
-    setActiveBeadPalette(newActiveBeadPalette);
-  }, [customPaletteSelections, excludedColorKeys, remapTrigger]);
 
   // --- Event Handlers ---
 
@@ -664,6 +612,7 @@ export default function Home() {
       const restored = restoreProjectToWorkspace(project);
       skipNextAutosaveRef.current = true;
       currentProjectRef.current = project;
+      pendingProjectIdRef.current = project.id;
       setActiveProjectSnapshot(project);
       setRestoredProjectMode(true);
       setActiveProjectId(project.id);
@@ -727,6 +676,7 @@ export default function Home() {
       await store.delete(id);
       if (activeProjectId === id) {
         currentProjectRef.current = null;
+        pendingProjectIdRef.current = null;
         setActiveProjectSnapshot(null);
         setActiveProjectId(null);
         setActiveProjectName('未命名项目');
@@ -794,6 +744,8 @@ export default function Home() {
   }, [handleOpenProject, refreshProjects]);
 
   useEffect(() => {
+    const revision = autosaveRevisionRef.current + 1;
+    autosaveRevisionRef.current = revision;
     if (!mappedPixelData || !gridDimensions) return;
     if (skipNextAutosaveRef.current) {
       skipNextAutosaveRef.current = false;
@@ -804,7 +756,8 @@ export default function Home() {
       const store = projectStoreRef.current;
       if (!store) return;
       const now = new Date().toISOString();
-      const id = activeProjectId ?? crypto.randomUUID();
+      const id = activeProjectId ?? pendingProjectIdRef.current ?? crypto.randomUUID();
+      pendingProjectIdRef.current = id;
       const name = activeProjectName.trim() || `拼豆项目 ${new Date().toLocaleString('zh-CN')}`;
       const previous = currentProjectRef.current?.id === id ? currentProjectRef.current : null;
       let project: PatternProject;
@@ -832,8 +785,16 @@ export default function Home() {
         setProjectSaveState('error');
         return;
       }
-      void store.put(project)
+      const write = autosaveQueueRef.current
+        .catch(() => undefined)
+        .then(() => store.put(project));
+      autosaveQueueRef.current = write;
+      void write
         .then(async () => {
+          if (revision !== autosaveRevisionRef.current) return;
+          if (activeProjectId !== project.id || activeProjectName !== project.name) {
+            skipNextAutosaveRef.current = true;
+          }
           currentProjectRef.current = project;
           setActiveProjectSnapshot(project);
           setActiveProjectId(project.id);
@@ -843,6 +804,7 @@ export default function Home() {
           await refreshProjects();
         })
         .catch((error: unknown) => {
+          if (revision !== autosaveRevisionRef.current) return;
           setProjectSaveState('error');
           setProjectMessage(error instanceof ProjectError ? error.userMessage : '自动保存失败，请导出备份。');
         });
@@ -864,9 +826,14 @@ export default function Home() {
 
   const processFile = async (file: File): Promise<void> => {
     const importTaskId = ++imageImportTaskIdRef.current;
+    autosaveRevisionRef.current += 1;
+    if (mappedPixelData && gridDimensions) {
+      skipNextAutosaveRef.current = true;
+    }
     setImportError(null);
     setRestoredProjectMode(false);
     currentProjectRef.current = null;
+    pendingProjectIdRef.current = null;
     setActiveProjectSnapshot(null);
     setActiveProjectId(null);
     setActiveProjectName('未命名项目');
@@ -880,6 +847,7 @@ export default function Home() {
       console.log('正在导入CSV文件...');
       importCsvData(file)
         .then(({ mappedPixelData, gridDimensions }) => {
+          if (importTaskId !== imageImportTaskIdRef.current) return;
           console.log(`成功导入CSV文件: ${gridDimensions.N}x${gridDimensions.M}`);
           
           // 设置导入的数据
@@ -889,30 +857,11 @@ export default function Home() {
           setImageTransform(null);
           setOriginalImageSrc(null); // CSV导入时没有原始图片
           
-          // 计算颜色统计
-          const colorCountsMap: { [key: string]: { count: number; color: string } } = {};
-          let totalCount = 0;
+          const statistics = calculateWorkspaceColorStatistics(mappedPixelData);
           
-          mappedPixelData.forEach(row => {
-            row.forEach(cell => {
-              if (cell && !cell.isExternal) {
-                const colorKey = cell.color.toUpperCase();
-                if (colorCountsMap[colorKey]) {
-                  colorCountsMap[colorKey].count++;
-                } else {
-                  colorCountsMap[colorKey] = {
-                    count: 1,
-                    color: cell.color
-                  };
-                }
-                totalCount++;
-              }
-            });
-          });
-          
-          setColorCounts(colorCountsMap);
-          setTotalBeadCount(totalCount);
-          setInitialGridColorKeys(new Set(Object.keys(colorCountsMap)));
+          setColorCounts(statistics.counts);
+          setTotalBeadCount(statistics.total);
+          setInitialGridColorKeys(new Set(Object.keys(statistics.counts)));
           
           // 根据mappedPixelData生成合成的originalImageSrc
           const syntheticImageSrc = generateSyntheticImageFromPixelData(mappedPixelData, gridDimensions);
@@ -931,9 +880,10 @@ export default function Home() {
           setGranularity(gridDimensions.N);
           setGranularityInput(gridDimensions.N.toString());
           
-          alert(`成功导入CSV文件！图纸尺寸：${gridDimensions.N}x${gridDimensions.M}，共使用${Object.keys(colorCountsMap).length}种颜色。`);
+          alert(`成功导入CSV文件！图纸尺寸：${gridDimensions.N}x${gridDimensions.M}，共使用${Object.keys(statistics.counts).length}种颜色。`);
         })
         .catch(error => {
+          if (importTaskId !== imageImportTaskIdRef.current) return;
           console.error('CSV导入失败:', error);
           alert(`CSV导入失败：${error.message}`);
         });
@@ -1307,28 +1257,16 @@ export default function Home() {
                 return { key: paletteColor.key, color: paletteColor.hex };
               }),
           );
-          const nextColorCounts: {
-            [key: string]: { count: number; color: string };
-          } = {};
-          let nextTotal = 0;
-          for (const row of mappedData) {
-            for (const cell of row) {
-              if (cell.isExternal) continue;
-              const existing = nextColorCounts[cell.key];
-              if (existing) existing.count += 1;
-              else nextColorCounts[cell.key] = { count: 1, color: cell.color };
-              nextTotal += 1;
-            }
-          }
+          const statistics = calculateWorkspaceColorStatistics(mappedData);
 
           setMappedPixelData(mappedData);
           setGridDimensions({
             N: result.grid.width,
             M: result.grid.height,
           });
-          setColorCounts(nextColorCounts);
-          setTotalBeadCount(nextTotal);
-          setInitialGridColorKeys(new Set(Object.keys(nextColorCounts)));
+          setColorCounts(statistics.counts);
+          setTotalBeadCount(statistics.total);
+          setInitialGridColorKeys(new Set(Object.keys(statistics.counts)));
           setGenerationStatus({
             state: 'complete',
             completed: result.grid.height,
@@ -2220,50 +2158,6 @@ export default function Home() {
     {/* PWA 安装按钮 */}
     <InstallPWA />
     
-    {/* ++ 修改：添加 onLoad 回调函数 ++ */}
-    <Script
-      async
-      src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"
-      strategy="lazyOnload"
-      onLoad={() => {
-        const basePV = 378536; // ++ 预设 PV 基数 ++
-        const baseUV = 257864; // ++ 预设 UV 基数 ++
-
-        const updateCount = (spanId: string, baseValue: number) => {
-          const targetNode = document.getElementById(spanId);
-          if (!targetNode) return;
-
-          const observer = new MutationObserver((mutationsList) => {
-            for (const mutation of mutationsList) {
-              if (mutation.type === 'childList' || mutation.type === 'characterData') {
-                const currentValueText = targetNode.textContent?.trim() || '0';
-                if (currentValueText !== '...') {
-                  const currentValue = parseInt(currentValueText.replace(/,/g, ''), 10) || 0;
-                  targetNode.textContent = (currentValue + baseValue).toLocaleString();
-                  observer.disconnect(); // ++ 更新后停止观察 ++ 
-                  // console.log(`Updated ${spanId} from ${currentValueText} to ${targetNode.textContent}`);
-                  break; // 处理完第一个有效更新即可
-                }
-              }
-            }
-          });
-
-          observer.observe(targetNode, { childList: true, characterData: true, subtree: true });
-
-          // ++ 处理初始值已经是数字的情况 (如果脚本加载很快) ++
-          const initialValueText = targetNode.textContent?.trim() || '0';
-          if (initialValueText !== '...') {
-             const initialValue = parseInt(initialValueText.replace(/,/g, ''), 10) || 0;
-             targetNode.textContent = (initialValue + baseValue).toLocaleString();
-             observer.disconnect(); // 已更新，无需再观察
-          }
-        };
-
-        updateCount('busuanzi_value_site_pv', basePV);
-        updateCount('busuanzi_value_site_uv', baseUV);
-      }}
-    />
-
     {/* Apply dark mode styles to the main container */}
     <div className="min-h-screen p-4 sm:p-6 flex flex-col items-center bg-gradient-to-b from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 font-[family-name:var(--font-geist-sans)] overflow-x-hidden">
       {/* Apply dark mode styles to the header */}
@@ -2454,8 +2348,16 @@ export default function Home() {
         {/* Apply dark mode styles to the Drop Zone */}
         <div
           data-testid="image-drop-zone"
+          role="button"
+          tabIndex={isMounted ? 0 : -1}
+          aria-disabled={!isMounted}
           onDrop={handleDrop} onDragOver={handleDragOver} onDragEnter={handleDragOver}
           onClick={isMounted ? triggerFileInput : undefined}
+          onKeyDown={(event) => {
+            if (!isMounted || (event.key !== 'Enter' && event.key !== ' ')) return;
+            event.preventDefault();
+            triggerFileInput();
+          }}
           className={`border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 sm:p-8 text-center ${isMounted ? 'cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-gray-800' : 'cursor-wait'} transition-all duration-300 w-full md:max-w-md flex flex-col justify-center items-center shadow-sm hover:shadow-md`}
           style={{ minHeight: '130px' }}
         >
@@ -2851,7 +2753,14 @@ export default function Home() {
                   return (
                     <li
                       key={hexKey}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleToggleExcludeColor(hexKey)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return;
+                        event.preventDefault();
+                        handleToggleExcludeColor(hexKey);
+                      }}
                        // Apply dark mode styles for list items (normal and excluded)
                       className={`flex items-center justify-between p-1.5 rounded cursor-pointer transition-colors ${ 
                         isExcluded

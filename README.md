@@ -14,11 +14,12 @@
 
 ---
 
-本仓库基于 [Zippland/perler-beads](https://github.com/Zippland/perler-beads) 继续开发，保留完整上游历史并整体使用 AGPL-3.0。
 
-截至 2026-07-17，规划中的阶段 0–6 已全部实现并合并到 `main`。当前主线提交为
-`15802ba`，纯前端 `local-only` 版本已发布到
-[pindou.blogchen.asia](https://pindou.blogchen.asia/)；品牌色板的来源/再分发依据和真实 Safari/移动设备验收仍是公开稳定版的发布前置条件。
+本仓库基于 [Zippland/perler-beads](https://github.com/Zippland/perler-beads) 继续开发，保留完整上游历史并整体使用 AGPL-3.0。当前已完成核心图像生成、精修、本地项目、制作模式和导出链路，并持续进行稳定性维护。
+
+纯前端 `local-only` 版本已发布到
+[pindou.blogchen.asia](https://pindou.blogchen.asia/)；
+
 
 ## 功能
 
@@ -83,8 +84,6 @@ npm run test:e2e:local-only
 
 `npm run ci` 依次执行 lint、类型检查、Vitest、固定素材与 PWA 资产校验、许可证清单、安全策略、在线生产依赖审计和生产构建。GitHub Actions 会对 push 和 pull request 执行同等质量门禁，并在其后运行浏览器回归。
 
-2026-07-17 对 `main@15802ba` 的本地复验结果：21 个测试文件、103 个单元测试通过；30 个固定素材、4 个可复现 PWA 图标和 4 个清单资源通过；生产依赖在线审计为 0 漏洞；9/9 静态页面构建通过；Chromium 单 worker 22/22、`local-only` 专项 1/1 通过。
-
 `npm run audit:prod:online` 会把依赖图发送到 npm 漏洞服务；本地执行前应确认允许该外部请求。
 
 ## 技术栈
@@ -99,7 +98,11 @@ npm run test:e2e:local-only
 | 测试 | Vitest + Playwright |
 | 发布与 CI | Vercel + GitHub Actions |
 
+
+
+
 ## 核心设计
+
 
 - 核心颜色、图案、编辑、项目、豆板、制作和统计逻辑与 React/DOM 解耦，便于纯函数测试。
 - 项目网格是统计和导出的事实源；透明外部格不计入数量，也不会跨越清理边界。
@@ -126,8 +129,13 @@ npm run test:e2e:local-only
 - [ ] 目标用户网络可用性和性能验收
 - [ ] 品牌色板来源、准确性和再分发权闭环
 - [ ] 真实 Safari 桌面、Chrome Android、Safari iPhone 验收
+- [x] CIEDE2000 (Delta E) 颜色距离算法
+- [ ] Floyd-Steinberg 抖动，在有限色板下模拟更丰富的颜色过渡
+- [x] Web Workers 后台计算，优化大图性能
+- [ ] 用户自定义调色板上传
+- [ ] 微信小程序版本
 
-当前未把用户账号、云端项目同步、支付、电商、社区或 AI 图片上传列入范围。
+
 
 ## 参与贡献
 

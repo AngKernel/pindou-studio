@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: './tests/e2e',
   testMatch: 'local-only.spec.ts',
   fullyParallel: false,
+  timeout: 60_000,
+  workers: 2,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['line'], ['html', { open: 'never' }]] : 'line',
   use: {

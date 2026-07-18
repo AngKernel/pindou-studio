@@ -1,4 +1,9 @@
 import { GridDownloadOptions } from '../types/downloadTypes';
+import {
+  MAX_PROJECT_CELLS,
+  MAX_PROJECT_DIMENSION,
+  MAX_PROJECT_FILE_BYTES,
+} from '../core/project';
 import { MappedPixel, PaletteColor } from './pixelation';
 import { getDisplayColorKey, getColorKeyByHex, ColorSystem } from './colorSystemUtils';
 
@@ -104,91 +109,88 @@ export function exportCsvData({
   console.log("CSV数据导出完成");
 }
 
-// 导入CSV hex数据的函数
-export function importCsvData(file: File): Promise<{
+export interface ImportedCsvData {
   mappedPixelData: MappedPixel[][];
   gridDimensions: { N: number; M: number };
-}> {
+}
+
+export function parseCsvData(text: string): ImportedCsvData {
+  const normalizedText = text.trim();
+  if (!normalizedText) {
+    throw new Error('CSV文件为空');
+  }
+
+  const lines = normalizedText.split(/\r?\n/);
+  const M = lines.length;
+  if (M > MAX_PROJECT_DIMENSION) {
+    throw new Error(`CSV行数不能超过${MAX_PROJECT_DIMENSION}行`);
+  }
+
+  const N = lines[0].split(',').length;
+  if (N > MAX_PROJECT_DIMENSION) {
+    throw new Error(`CSV列数不能超过${MAX_PROJECT_DIMENSION}列`);
+  }
+  if (N * M > MAX_PROJECT_CELLS) {
+    throw new Error(`CSV单元格总数不能超过${MAX_PROJECT_CELLS}个`);
+  }
+
+  const mappedPixelData: MappedPixel[][] = [];
+  for (let row = 0; row < M; row++) {
+    const rowData = lines[row].split(',');
+    if (rowData.length !== N) {
+      throw new Error(`第${row + 1}行的列数不匹配，期望${N}列，实际${rowData.length}列`);
+    }
+
+    const mappedRow: MappedPixel[] = [];
+    for (let col = 0; col < N; col++) {
+      const cellValue = rowData[col].trim();
+      if (cellValue === 'TRANSPARENT' || cellValue === '') {
+        mappedRow.push({
+          key: 'TRANSPARENT',
+          color: '#FFFFFF',
+          isExternal: true
+        });
+        continue;
+      }
+
+      if (!/^#[0-9A-Fa-f]{6}$/.test(cellValue)) {
+        throw new Error(`第${row + 1}行第${col + 1}列的颜色值无效：${cellValue}`);
+      }
+      const color = cellValue.toUpperCase();
+      mappedRow.push({
+        key: color,
+        color,
+        isExternal: false
+      });
+    }
+    mappedPixelData.push(mappedRow);
+  }
+
+  return {
+    mappedPixelData,
+    gridDimensions: { N, M }
+  };
+}
+
+// 导入CSV hex数据的函数
+export function importCsvData(file: File): Promise<ImportedCsvData> {
+  if (file.size > MAX_PROJECT_FILE_BYTES) {
+    return Promise.reject(new Error(`CSV文件不能超过${Math.floor(MAX_PROJECT_FILE_BYTES / 1024 / 1024)} MB`));
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     
     reader.onload = (e) => {
       try {
-        const text = e.target?.result as string;
-        if (!text) {
+        const text = e.target?.result;
+        if (typeof text !== 'string') {
           reject(new Error('无法读取文件内容'));
           return;
         }
-        
-        // 解析CSV内容
-        const lines = text.trim().split('\n');
-        const M = lines.length; // 行数
-        
-        if (M === 0) {
-          reject(new Error('CSV文件为空'));
-          return;
-        }
-        
-        // 解析第一行获取列数
-        const firstRowData = lines[0].split(',');
-        const N = firstRowData.length; // 列数
-        
-        if (N === 0) {
-          reject(new Error('CSV文件格式无效'));
-          return;
-        }
-        
-        // 创建映射数据
-        const mappedPixelData: MappedPixel[][] = [];
-        
-        for (let row = 0; row < M; row++) {
-          const rowData = lines[row].split(',');
-          const mappedRow: MappedPixel[] = [];
-          
-          // 确保每行都有正确的列数
-          if (rowData.length !== N) {
-            reject(new Error(`第${row + 1}行的列数不匹配，期望${N}列，实际${rowData.length}列`));
-            return;
-          }
-          
-          for (let col = 0; col < N; col++) {
-            const cellValue = rowData[col].trim();
-            
-            if (cellValue === 'TRANSPARENT' || cellValue === '') {
-              // 外部/透明单元格
-              mappedRow.push({
-                key: 'TRANSPARENT',
-                color: '#FFFFFF',
-                isExternal: true
-              });
-            } else {
-              // 验证hex颜色格式
-              const hexPattern = /^#[0-9A-Fa-f]{6}$/;
-              if (!hexPattern.test(cellValue)) {
-                reject(new Error(`第${row + 1}行第${col + 1}列的颜色值无效：${cellValue}`));
-                return;
-              }
-              
-              // 内部单元格
-              mappedRow.push({
-                key: cellValue.toUpperCase(),
-                color: cellValue.toUpperCase(),
-                isExternal: false
-              });
-            }
-          }
-          
-          mappedPixelData.push(mappedRow);
-        }
-        
-        // 返回解析结果
-        resolve({
-          mappedPixelData,
-          gridDimensions: { N, M }
-        });
-        
+        resolve(parseCsvData(text));
       } catch (error) {
-        reject(new Error(`解析CSV文件失败：${error}`));
+        reject(error instanceof Error ? error : new Error('解析CSV文件失败'));
       }
     };
     
