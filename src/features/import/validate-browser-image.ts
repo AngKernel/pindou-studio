@@ -34,8 +34,12 @@ export async function validateAndDecodeBrowserImageFile(
     throw new ImageImportError('DECODE_FAILED', '图片无法解码，文件可能已损坏。');
   }
 
+  const decodedWidth = bitmap.width;
+  const decodedHeight = bitmap.height;
   try {
-    if (bitmap.width !== validated.width || bitmap.height !== validated.height) {
+    const dimensionsMatch = decodedWidth === validated.width && decodedHeight === validated.height;
+    const dimensionsMatchAfterExifRotation = decodedWidth === validated.height && decodedHeight === validated.width;
+    if (!dimensionsMatch && !dimensionsMatchAfterExifRotation) {
       throw new ImageImportError(
         'DECODE_FAILED',
         '图片文件头尺寸与实际解码尺寸不一致，已拒绝导入。',
@@ -45,5 +49,9 @@ export async function validateAndDecodeBrowserImageFile(
     bitmap.close();
   }
 
-  return validated;
+  return {
+    ...validated,
+    width: decodedWidth,
+    height: decodedHeight,
+  };
 }

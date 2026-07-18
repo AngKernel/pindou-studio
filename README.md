@@ -14,7 +14,7 @@
 
 ---
 
-本仓库基于 [Zippland/perler-beads](https://github.com/Zippland/perler-beads) 继续开发，保留完整上游历史并整体使用 AGPL-3.0。当前已完成阶段 0 的审计和工程初始化，核心产品功能仍以增量方式开发。
+本仓库基于 [Zippland/perler-beads](https://github.com/Zippland/perler-beads) 继续开发，保留完整上游历史并整体使用 AGPL-3.0。当前已完成核心图像生成、精修、本地项目、制作模式和导出链路，并持续进行稳定性维护。
 
 ## 功能
 
@@ -74,7 +74,7 @@ GitHub Actions 会对 push 和 pull request 执行同等门禁。
 
 ### 1. 初始颜色映射
 
-对每个网格单元提取主导色或平均色，并使用 Oklab 欧氏距离映射到当前色板。阶段 1 将按验收要求替换为 Lab + CIEDE2000，并保留现有输出作为回归基线。
+对每个网格单元提取主导色或平均色，并使用 Lab + CIEDE2000 色差映射到当前色板。
 
 ### 2. 区域颜色合并
 
@@ -94,9 +94,9 @@ GitHub Actions 会对 push 和 pull request 执行同等门禁。
 
 ## Roadmap
 
-- [ ] CIEDE2000 (Delta E) 颜色距离算法，替代 RGB 欧氏距离
+- [x] CIEDE2000 (Delta E) 颜色距离算法
 - [ ] Floyd-Steinberg 抖动，在有限色板下模拟更丰富的颜色过渡
-- [ ] Web Workers 后台计算，优化大图性能
+- [x] Web Workers 后台计算，优化大图性能
 - [ ] 用户自定义调色板上传
 - [ ] 微信小程序版本
 

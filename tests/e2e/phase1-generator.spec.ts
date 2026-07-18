@@ -46,6 +46,12 @@ test('accepts a PNG through drag and drop', async ({ page }) => {
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', { timeout: 20_000 });
 });
 
+test('exposes the upload area as a keyboard-focusable control', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('image-drop-zone')).toHaveAttribute('role', 'button');
+  await expect(page.getByTestId('image-drop-zone')).toHaveAttribute('tabindex', '0');
+});
+
 for (const format of ['jpeg', 'png', 'webp'] as const) {
   test(`imports ${format} and generates a 100×100 pattern in a Worker`, async ({ page }) => {
     await page.goto('/');

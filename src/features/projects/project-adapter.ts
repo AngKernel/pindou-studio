@@ -98,7 +98,18 @@ export function createProjectFromWorkspace(input: WorkspaceProjectInput): Patter
     }
   }
 
+  const completed = new Uint8Array(cellCount);
   const canPreserveCompleted = input.previous?.width === input.width && input.previous.height === input.height;
+  if (canPreserveCompleted && input.previous) {
+    for (let index = 0; index < cellCount; index += 1) {
+      if (external[index] || input.previous.external[index]) continue;
+      const currentColor = palette[cells[index]];
+      const previousColor = input.previous.palette.colors[input.previous.cells[index]];
+      if (currentColor && previousColor && hexFromRgb(currentColor.rgb) === hexFromRgb(previousColor.rgb)) {
+        completed[index] = input.previous.completed[index] ? 1 : 0;
+      }
+    }
+  }
   const board = input.board ?? input.previous?.board ?? DEFAULT_BOARD;
   const boardCount = Math.ceil(input.width / board.width) * Math.ceil(input.height / board.height);
   const previousMakerState = input.previous?.makerState ?? { activeBoardIndex: 0, lastPosition: null };
@@ -119,7 +130,7 @@ export function createProjectFromWorkspace(input: WorkspaceProjectInput): Patter
     },
     cells,
     external,
-    completed: canPreserveCompleted ? input.previous!.completed.slice() : new Uint8Array(cellCount),
+    completed,
     board,
     makerState: {
       activeBoardIndex: Math.min(previousMakerState.activeBoardIndex, boardCount - 1),

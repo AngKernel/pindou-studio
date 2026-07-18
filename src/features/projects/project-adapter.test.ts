@@ -29,31 +29,32 @@ describe('workspace project adapter', () => {
     });
   });
 
-  it('preserves completion data only when the grid dimensions still match', () => {
+  it('preserves completion data only for unchanged cells in a matching grid', () => {
     const first = createProjectFromWorkspace({
       id: '11111111-1111-4111-8111-111111111111',
       name: '保留进度',
-      mappedPixelData: [[{ key: 'A1', color: '#FFFFFF' }]],
-      width: 1,
+      mappedPixelData: [[{ key: 'A1', color: '#FFFFFF' }, { key: 'B1', color: '#000000' }]],
+      width: 2,
       height: 1,
       paletteId: 'MARD',
       generationSettings: {},
       now: '2026-07-16T03:00:00.000Z',
     });
     first.completed[0] = 1;
+    first.completed[1] = 1;
 
     const saved = createProjectFromWorkspace({
       id: first.id,
       name: first.name,
-      mappedPixelData: [[{ key: 'A1', color: '#FFFFFF' }]],
-      width: 1,
+      mappedPixelData: [[{ key: 'A1', color: '#FFFFFF' }, { key: 'C1', color: '#FF0000' }]],
+      width: 2,
       height: 1,
       paletteId: 'MARD',
       generationSettings: {},
       previous: first,
       now: '2026-07-16T04:00:00.000Z',
     });
-    expect([...saved.completed]).toEqual([1]);
+    expect([...saved.completed]).toEqual([1, 0]);
     expect(saved.createdAt).toBe(first.createdAt);
   });
 
