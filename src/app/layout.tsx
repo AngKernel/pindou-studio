@@ -4,8 +4,8 @@ import { LicensingProvider } from "../features/licensing/LicensingProvider";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://pindou.blogchen.asia/"),
-  title: "Pindou Studio | 拼豆工作台",
-  description: "上传图片，调整精细度，一键生成像素画图纸，简单实用的像素画生成工具",
+  title: "Pindou Studio｜把图片变成真正能拼的图纸",
+  description: "上传图片后直接拖拽裁剪，生成拼豆预览，继续精修、统计并导出图纸。图片只在当前浏览器处理。",
   alternates: {
     canonical: "/",
   },
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#f8fafc",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

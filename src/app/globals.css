@@ -26,3 +26,36 @@ body {
   color: var(--foreground);
   font-family: var(--app-font-sans);
 }
+
+html {
+  scroll-behavior: smooth;
+}
+
+.pindou-home {
+  background:
+    radial-gradient(circle at 8% 0%, rgb(255 92 53 / 0.12), transparent 28rem),
+    radial-gradient(circle at 92% 18%, rgb(86 207 225 / 0.13), transparent 26rem),
+    linear-gradient(180deg, #f8fafc 0%, #fffaf6 48%, #f8fafc 100%);
+}
+
+@media (prefers-color-scheme: dark) {
+  .pindou-home {
+    background:
+      radial-gradient(circle at 8% 0%, rgb(255 92 53 / 0.14), transparent 28rem),
+      radial-gradient(circle at 92% 18%, rgb(86 207 225 / 0.08), transparent 26rem),
+      linear-gradient(180deg, #0b1120 0%, #111827 48%, #080d16 100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
