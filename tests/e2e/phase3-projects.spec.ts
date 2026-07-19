@@ -7,6 +7,7 @@ async function createSavedProject(page: Page): Promise<void> {
   }).png().toBuffer();
   await page.goto('/');
   await page.getByTestId('image-file-input').setInputFiles({ name: 'local-project.png', mimeType: 'image/png', buffer });
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', { timeout: 45_000 });
   await expect(page.getByTestId('active-project-name')).toContainText('已保存到此浏览器', { timeout: 15_000 });
   await expect(page.getByTestId('project-card')).toHaveCount(1);
@@ -18,6 +19,19 @@ test('autosaves to IndexedDB and restores the exact project after refresh', asyn
   await expect(page.getByTestId('project-card')).toHaveCount(1);
   await page.getByTestId('project-open').click();
   await expect(page.getByText('拼豆生成结果')).toBeVisible();
+  await expect(page.getByTestId('processed-image-canvas')).toBeVisible();
+  await expect(page.getByTestId('pattern-result-canvas')).toBeVisible();
+  const canvasDimensions = await page.evaluate(() => {
+    const source = document.querySelector<HTMLCanvasElement>('[data-testid="processed-image-canvas"]');
+    const result = document.querySelector<HTMLCanvasElement>('[data-testid="pattern-result-canvas"]');
+    return {
+      source: source ? [source.width, source.height] : null,
+      result: result ? [result.width, result.height] : null,
+    };
+  });
+  expect(canvasDimensions.source).toEqual([36, 36]);
+  expect(canvasDimensions.result?.[0]).toBe(canvasDimensions.result?.[1]);
+  expect(canvasDimensions.result?.[0]).toBeGreaterThan(0);
   await expect(page.getByTestId('active-project-name')).toContainText('已保存到此浏览器');
   await expect(page.getByText('100×100 · MARD')).toBeVisible();
 });
@@ -77,6 +91,7 @@ test('keeps image generation usable when IndexedDB is unavailable', async ({ pag
   await page.goto('/');
   await expect(page.getByTestId('local-projects').getByRole('alert')).toContainText('编辑功能仍可继续');
   await page.getByTestId('image-file-input').setInputFiles({ name: 'offline.png', mimeType: 'image/png', buffer });
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', { timeout: 45_000 });
   await expect(page.getByText('拼豆生成结果')).toBeVisible();
 });

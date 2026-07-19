@@ -10,6 +10,7 @@ async function createProject(page: Page, options: { width?: number; height?: num
     : await sharp({ create: { width: 40, height: 40, channels: 4, background: { r: 230, g: 50, b: 60, alpha: 1 } } }).png().toBuffer();
   await page.goto('/');
   await page.getByTestId('image-file-input').setInputFiles({ name: 'export.png', mimeType: 'image/png', buffer: source });
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', { timeout: 45_000 });
   if (options.width || options.height) {
     await page.getByLabel('锁定处理区域宽高比').uncheck();

@@ -7,9 +7,6 @@ async function uploadAndWaitForPattern(page: import('@playwright/test').Page): P
   await page.goto('/');
   await page.getByTestId('image-file-input').setInputFiles(fixturePath);
   await expect(page.getByTestId('visual-cropper')).toBeVisible();
-  await expect(page.getByTestId('generation-status')).toContainText('生成完成', {
-    timeout: 45_000,
-  });
 }
 
 test('completes the redesigned upload, visual crop, edit and export flow', async ({ page }) => {
@@ -19,10 +16,9 @@ test('completes the redesigned upload, visual crop, edit and export flow', async
 
   await page.getByTestId('image-file-input').setInputFiles(fixturePath);
   await expect(page.getByTestId('visual-cropper')).toBeVisible();
+  await expect(page.getByTestId('transform-preview')).toBeVisible();
   await expect(page.getByTestId('workflow-stepper')).toBeVisible();
-  await expect(page.getByTestId('generation-status')).toContainText('生成完成', {
-    timeout: 45_000,
-  });
+  await expect(page.getByTestId('generation-status')).toHaveCount(0);
 
   const cropBox = page.getByTestId('crop-box');
   const beforeCrop = await cropBox.boundingBox();
@@ -35,23 +31,18 @@ test('completes the redesigned upload, visual crop, edit and export flow', async
   await page.mouse.down();
   await page.mouse.move(handleBox!.x - 72, handleBox!.y - 42, { steps: 8 });
   await page.mouse.up();
-  await expect(page.getByTestId('generation-status')).toContainText('生成完成', {
-    timeout: 45_000,
-  });
   const afterCrop = await cropBox.boundingBox();
   expect(afterCrop).not.toBeNull();
   expect(afterCrop!.width).toBeLessThan(beforeCrop!.width);
   expect(afterCrop!.height).toBeLessThan(beforeCrop!.height);
 
   await page.getByRole('button', { name: '1 : 1' }).click();
-  await expect(page.getByTestId('generation-status')).toContainText('生成完成', {
-    timeout: 45_000,
-  });
   const squareCrop = await cropBox.boundingBox();
   expect(squareCrop).not.toBeNull();
   expect(Math.abs(squareCrop!.width - squareCrop!.height)).toBeLessThan(2);
 
   await page.getByRole('button', { name: '顺时针旋转至 90 度' }).click();
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', {
     timeout: 45_000,
   });
@@ -107,12 +98,13 @@ test('keeps the touch cropper usable on a narrow phone viewport', async ({ page 
     bubbles: true,
   });
 
-  await expect(page.getByTestId('generation-status')).toContainText('生成完成', {
-    timeout: 45_000,
-  });
   const afterCrop = await cropBox.boundingBox();
   expect(afterCrop).not.toBeNull();
   expect(afterCrop!.width).toBeLessThan(beforeCrop!.width);
   expect(afterCrop!.height).toBeLessThan(beforeCrop!.height);
+  await page.getByTestId('crop-confirm').click();
+  await expect(page.getByTestId('generation-status')).toContainText('生成完成', {
+    timeout: 45_000,
+  });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });

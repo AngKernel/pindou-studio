@@ -1,7 +1,8 @@
 import type { RgbColor } from '../color';
+import type { ImageTransformSettings } from '../image/transform';
 
 export const CURRENT_PROJECT_FORMAT_VERSION = 3 as const;
-export const MAX_PROJECT_FILE_BYTES = 5 * 1024 * 1024;
+export const MAX_PROJECT_FILE_BYTES = 32 * 1024 * 1024;
 export const MAX_PROJECT_DIMENSION = 300;
 export const MAX_PROJECT_CELLS = MAX_PROJECT_DIMENSION * MAX_PROJECT_DIMENSION;
 
@@ -42,6 +43,12 @@ export interface SerializablePatternProject {
     readonly lastPosition: { readonly row: number; readonly column: number } | null;
   };
   readonly generationSettings: Readonly<Record<string, JsonValue>>;
+  readonly sourceImage?: {
+    readonly dataUrl: string;
+    readonly width: number;
+    readonly height: number;
+    readonly transform: ImageTransformSettings;
+  };
   readonly thumbnailDataUrl?: string;
   readonly createdAt: string;
   readonly updatedAt: string;

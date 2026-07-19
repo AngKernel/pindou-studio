@@ -34,6 +34,33 @@ const makerStateSchema = z.object({
     column: z.number().int().min(0).max(MAX_PROJECT_DIMENSION - 1),
   }).strict().nullable(),
 }).strict();
+const cropRectSchema = z.object({
+  x: z.number().int().min(0).max(100_000),
+  y: z.number().int().min(0).max(100_000),
+  width: z.number().int().min(1).max(100_000),
+  height: z.number().int().min(1).max(100_000),
+}).strict();
+const imageTransformSchema = z.object({
+  crop: cropRectSchema,
+  rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
+  flipHorizontal: z.boolean(),
+  flipVertical: z.boolean(),
+  scale: z.number().min(0.25).max(3),
+  offsetX: z.number().int().min(-100_000).max(100_000),
+  offsetY: z.number().int().min(-100_000).max(100_000),
+  background: z.union([
+    z.object({ mode: z.literal('preserve-alpha') }).strict(),
+    z.object({ mode: z.literal('solid'), color: rgbSchema }).strict(),
+  ]),
+}).strict();
+const sourceImageSchema = z.object({
+  dataUrl: z.string().max(30_000_000).regex(
+    /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
+  ),
+  width: z.number().int().min(1).max(100_000),
+  height: z.number().int().min(1).max(100_000),
+  transform: imageTransformSchema,
+}).strict();
 
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() => z.union([
   z.string().max(20_000),
@@ -85,6 +112,7 @@ export const projectV3Schema = z.object({
   external: z.array(z.number().int().min(0).max(1)).max(MAX_PROJECT_CELLS),
   makerState: makerStateSchema,
   generationSettings: z.record(z.string().max(200), jsonValueSchema),
+  sourceImage: sourceImageSchema.optional(),
   thumbnailDataUrl: z.string().max(700_000).regex(
     /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
   ).optional(),

@@ -51,6 +51,18 @@ function assertCellSemantics(project: ParsedProjectV3): void {
   if (lastPosition && (lastPosition.row >= project.height || lastPosition.column >= project.width)) {
     throw new ProjectError('INVALID_PROJECT', '项目记录的上次制作位置超出画布范围。');
   }
+  const sourceImage = project.sourceImage;
+  if (sourceImage) {
+    const crop = sourceImage.transform.crop;
+    if (
+      crop.x + crop.width > sourceImage.width
+      || crop.y + crop.height > sourceImage.height
+      || Math.abs(sourceImage.transform.offsetX) > Math.max(crop.width, crop.height)
+      || Math.abs(sourceImage.transform.offsetY) > Math.max(crop.width, crop.height)
+    ) {
+      throw new ProjectError('INVALID_PROJECT', '项目保存的原图裁剪参数超出图片范围。');
+    }
+  }
 }
 
 function migrateV1(project: ParsedProjectV1): ParsedProjectV2 {
@@ -128,7 +140,7 @@ export function parseProject(input: string | unknown): PatternProject {
   let value = input;
   if (typeof input === 'string') {
     if (new TextEncoder().encode(input).byteLength > MAX_PROJECT_FILE_BYTES) {
-      throw new ProjectError('PROJECT_TOO_LARGE', '项目文件不能超过 5 MB。');
+      throw new ProjectError('PROJECT_TOO_LARGE', '项目文件不能超过 32 MB。');
     }
     try {
       value = JSON.parse(input) as unknown;

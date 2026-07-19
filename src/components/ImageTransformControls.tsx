@@ -13,6 +13,7 @@ interface ImageTransformControlsProps {
   readonly sourceDimensions: { readonly width: number; readonly height: number };
   readonly settings: ImageTransformSettings;
   readonly onChange: (settings: ImageTransformSettings) => void;
+  readonly onConfirm: (settings: ImageTransformSettings) => void;
 }
 
 type DragMode = 'move' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
@@ -60,10 +61,12 @@ export default function ImageTransformControls({
   sourceDimensions,
   settings,
   onChange,
+  onConfirm,
 }: ImageTransformControlsProps) {
   const [draft, setDraft] = useState(settings);
   const draftRef = useRef(settings);
   const stageRef = useRef<HTMLDivElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<DragState | null>(null);
 
   useEffect(() => {
@@ -206,6 +209,53 @@ export default function ImageTransformControls({
   const rotatedWidth = draft.rotation === 90 || draft.rotation === 270 ? crop.height : crop.width;
   const rotatedHeight = draft.rotation === 90 || draft.rotation === 270 ? crop.width : crop.height;
 
+  useEffect(() => {
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    const image = new Image();
+    image.onload = () => {
+      const rounded = roundCrop(draft.crop);
+      const swapsAxes = draft.rotation === 90 || draft.rotation === 270;
+      const outputWidth = swapsAxes ? rounded.height : rounded.width;
+      const outputHeight = swapsAxes ? rounded.width : rounded.height;
+      const previewScale = Math.min(1, 900 / Math.max(outputWidth, outputHeight));
+      canvas.width = Math.max(1, Math.round(outputWidth * previewScale));
+      canvas.height = Math.max(1, Math.round(outputHeight * previewScale));
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.imageSmoothingEnabled = false;
+      if (draft.background.mode === 'solid') {
+        const { r, g, b } = draft.background.color;
+        context.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      context.save();
+      context.translate(
+        canvas.width / 2 + draft.offsetX * previewScale,
+        canvas.height / 2 + draft.offsetY * previewScale,
+      );
+      context.scale(
+        draft.scale * (draft.flipHorizontal ? -1 : 1),
+        draft.scale * (draft.flipVertical ? -1 : 1),
+      );
+      context.rotate(draft.rotation * Math.PI / 180);
+      context.drawImage(
+        image,
+        rounded.x,
+        rounded.y,
+        rounded.width,
+        rounded.height,
+        -rounded.width * previewScale / 2,
+        -rounded.height * previewScale / 2,
+        rounded.width * previewScale,
+        rounded.height * previewScale,
+      );
+      context.restore();
+    };
+    image.src = imageSrc;
+  }, [draft, imageSrc]);
+
   return (
     <section
       data-testid="visual-cropper"
@@ -217,7 +267,7 @@ export default function ImageTransformControls({
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#ff5c35] text-xs font-bold">1</span>
             <h2 className="font-semibold">先选好画面</h2>
           </div>
-          <p className="mt-1 text-xs text-slate-400">拖动画框或八个控制点，松手后自动更新拼豆预览</p>
+          <p className="mt-1 text-xs text-slate-400">拖动画框或八个控制点，右侧“当前效果”会即时更新</p>
         </div>
         <button
           data-testid="crop-reset"
@@ -284,6 +334,17 @@ export default function ImageTransformControls({
         </div>
 
         <div className="space-y-5 border-t border-white/10 bg-slate-900 p-4 lg:border-l lg:border-t-0">
+          <div>
+            <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">当前效果</p>
+            <div className="flex min-h-32 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-[linear-gradient(45deg,#1f2937_25%,transparent_25%),linear-gradient(-45deg,#1f2937_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1f2937_75%),linear-gradient(-45deg,transparent_75%,#1f2937_75%)] bg-[length:16px_16px]">
+              <canvas
+                ref={previewCanvasRef}
+                data-testid="transform-preview"
+                aria-label="裁剪和方向调整后的当前图片效果"
+                className="block max-h-48 max-w-full"
+              />
+            </div>
+          </div>
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-slate-500">裁剪比例</p>
             <div className="grid grid-cols-3 gap-2">
@@ -416,6 +477,18 @@ export default function ImageTransformControls({
           <p className="rounded-lg bg-white/5 px-3 py-2 text-xs leading-5 text-slate-400">
             输出画面 {Math.round(rotatedWidth)} × {Math.round(rotatedHeight)} px
           </p>
+          <button
+            data-testid="crop-confirm"
+            type="button"
+            onClick={() => {
+              const normalized = { ...draftRef.current, crop: roundCrop(draftRef.current.crop) };
+              commit(normalized);
+              onConfirm(normalized);
+            }}
+            className="min-h-12 w-full rounded-xl bg-[#ff5c35] px-4 font-semibold text-white shadow-lg shadow-orange-950/30 transition hover:bg-[#f04e28]"
+          >
+            确认画面，设置拼豆图纸
+          </button>
         </div>
       </div>
     </section>

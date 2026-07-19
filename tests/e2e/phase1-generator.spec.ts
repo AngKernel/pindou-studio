@@ -43,6 +43,7 @@ test('accepts a PNG through drag and drop', async ({ page }) => {
     transfer.items.add(new File([bytes], 'dropped.png', { type: 'image/png' }));
     element.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
   }, png.toString('base64'));
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', { timeout: 20_000 });
 });
 
@@ -60,6 +61,7 @@ for (const format of ['jpeg', 'png', 'webp'] as const) {
       mimeType: `image/${format}`,
       buffer: await fixture(format),
     });
+    await page.getByTestId('crop-confirm').click();
 
     await expect(page.getByTestId('generation-status')).toContainText('生成完成', {
       timeout: 45_000,
@@ -78,6 +80,7 @@ test('supports independent dimensions, four modes and latest-task wins', async (
     mimeType: 'image/png',
     buffer: await fixture('png', 120, 80),
   });
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', {
     timeout: 45_000,
   });

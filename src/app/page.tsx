@@ -71,6 +71,61 @@ const sourceCodeUrl =
 
 const legacyEditingOverlayEnabled = false;
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      if (typeof reader.result === 'string') resolve(reader.result);
+      else reject(new Error('图片读取结果不是 Data URL。'));
+    }, { once: true });
+    reader.addEventListener('error', () => reject(reader.error ?? new Error('图片读取失败。')), { once: true });
+    reader.readAsDataURL(file);
+  });
+}
+
+function drawImagePreview(
+  canvas: HTMLCanvasElement,
+  image: HTMLImageElement,
+  settings: ImageTransformSettings | null,
+): void {
+  if (!settings) {
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    canvas.getContext('2d')?.drawImage(image, 0, 0);
+    return;
+  }
+  const swapsAxes = settings.rotation === 90 || settings.rotation === 270;
+  const width = swapsAxes ? settings.crop.height : settings.crop.width;
+  const height = swapsAxes ? settings.crop.width : settings.crop.height;
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) return;
+  context.imageSmoothingEnabled = false;
+  if (settings.background.mode === 'solid') {
+    const { r, g, b } = settings.background.color;
+    context.fillStyle = `rgb(${r}, ${g}, ${b})`;
+    context.fillRect(0, 0, width, height);
+  }
+  context.translate(width / 2 + settings.offsetX, height / 2 + settings.offsetY);
+  context.scale(
+    settings.scale * (settings.flipHorizontal ? -1 : 1),
+    settings.scale * (settings.flipVertical ? -1 : 1),
+  );
+  context.rotate(settings.rotation * Math.PI / 180);
+  context.drawImage(
+    image,
+    settings.crop.x,
+    settings.crop.y,
+    settings.crop.width,
+    settings.crop.height,
+    -settings.crop.width / 2,
+    -settings.crop.height / 2,
+    settings.crop.width,
+    settings.crop.height,
+  );
+}
+
 // Helper function for sorting color keys - 保留原有实现，因为未在utils中导出
 function sortColorKeys(a: string, b: string): number {
   const regex = /^([A-Z]+)(\d+)$/;
@@ -124,6 +179,8 @@ import { TRANSPARENT_KEY, transparentColorData } from '../utils/pixelEditingUtil
 
 export default function Home() {
   const [originalImageSrc, setOriginalImageSrc] = useState<string | null>(null);
+  const [sourceImageDataUrl, setSourceImageDataUrl] = useState<string | null>(null);
+  const [imageWorkflowStep, setImageWorkflowStep] = useState<'crop' | 'settings'>('settings');
   const [importError, setImportError] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<number>(50);
   const [granularityInput, setGranularityInput] = useState<string>("50");
@@ -622,11 +679,17 @@ export default function Home() {
       setBoardSettings(project.board);
       setGridDimensions(restored.gridDimensions);
       handleEditorDataChange(restored.mappedPixelData);
-      setSourceImageDimensions(null);
-      setImageTransform(null);
+      setSourceImageDimensions(project.sourceImage
+        ? { width: project.sourceImage.width, height: project.sourceImage.height }
+        : null);
+      setImageTransform(project.sourceImage?.transform ?? null);
       setGranularity(project.width);
       setGridHeight(project.height);
-      setOriginalImageSrc(generateSyntheticImageFromPixelData(restored.mappedPixelData, restored.gridDimensions));
+      const restoredImageSrc = project.sourceImage?.dataUrl
+        ?? generateSyntheticImageFromPixelData(restored.mappedPixelData, restored.gridDimensions);
+      setSourceImageDataUrl(project.sourceImage?.dataUrl ?? null);
+      setOriginalImageSrc(restoredImageSrc);
+      setImageWorkflowStep('settings');
       setIsManualColoringMode(false);
       setSelectedColor(null);
       setGenerationStatus({ state: 'idle', completed: 0, total: 0 });
@@ -686,6 +749,7 @@ export default function Home() {
         setColorCounts(null);
         setTotalBeadCount(0);
         setOriginalImageSrc(null);
+        setSourceImageDataUrl(null);
         setRestoredProjectMode(false);
         setProjectSaveState('idle');
       }
@@ -720,7 +784,7 @@ export default function Home() {
     if (!store) return;
     try {
       if (file.size > MAX_PROJECT_FILE_BYTES) {
-        throw new ProjectError('PROJECT_TOO_LARGE', '项目文件不能超过 5 MB。');
+        throw new ProjectError('PROJECT_TOO_LARGE', '项目文件不能超过 32 MB。');
       }
       let project = parseProject(await file.text());
       const existing = await store.get(project.id);
@@ -776,6 +840,14 @@ export default function Home() {
             maximumColors,
             minimumRegionSize,
           },
+          sourceImage: sourceImageDataUrl && sourceImageDimensions && imageTransform
+            ? {
+                dataUrl: sourceImageDataUrl,
+                width: sourceImageDimensions.width,
+                height: sourceImageDimensions.height,
+                transform: imageTransform,
+              }
+            : undefined,
           board: boardSettings,
           thumbnailDataUrl: createProjectThumbnail(mappedPixelData, gridDimensions.N, gridDimensions.M),
           previous,
@@ -823,6 +895,9 @@ export default function Home() {
     refreshProjects,
     selectedColorSystem,
     similarityThreshold,
+    sourceImageDataUrl,
+    sourceImageDimensions,
+    imageTransform,
   ]);
 
   const processFile = async (file: File): Promise<void> => {
@@ -856,6 +931,8 @@ export default function Home() {
           setGridDimensions(gridDimensions);
           setSourceImageDimensions(null);
           setImageTransform(null);
+          setSourceImageDataUrl(null);
+          setImageWorkflowStep('settings');
           setOriginalImageSrc(null); // CSV导入时没有原始图片
           
           const statistics = calculateWorkspaceColorStatistics(mappedPixelData);
@@ -907,6 +984,8 @@ export default function Home() {
       try {
         const validated = await validateAndDecodeBrowserImageFile(file);
         if (importTaskId !== imageImportTaskIdRef.current) return;
+        const dataUrl = await readFileAsDataUrl(file);
+        if (importTaskId !== imageImportTaskIdRef.current) return;
 
         const nextTransform = createDefaultImageTransform(validated.width, validated.height);
         const defaultGridWidth = 100;
@@ -916,15 +995,16 @@ export default function Home() {
         );
         setSourceImageDimensions({ width: validated.width, height: validated.height });
         setImageTransform(nextTransform);
+        setSourceImageDataUrl(dataUrl);
+        setImageWorkflowStep('crop');
         setGridHeight(defaultGridHeight);
         setGridHeightInput(defaultGridHeight.toString());
 
-        const objectUrl = URL.createObjectURL(file);
         if (activeImageObjectUrlRef.current) {
           URL.revokeObjectURL(activeImageObjectUrlRef.current);
+          activeImageObjectUrlRef.current = null;
         }
-        activeImageObjectUrlRef.current = objectUrl;
-        applyImageSrc(objectUrl);
+        applyImageSrc(dataUrl);
       } catch (error) {
         if (importTaskId !== imageImportTaskIdRef.current) return;
         const message =
@@ -1005,7 +1085,16 @@ export default function Home() {
       setGridHeight(nextHeight);
       setGridHeightInput(nextHeight.toString());
     }
-    setRemapTrigger((previous) => previous + 1);
+    if (imageWorkflowStep === 'settings') {
+      setRemapTrigger((previous) => previous + 1);
+    }
+  };
+
+  const handleConfirmCrop = (settings: ImageTransformSettings) => {
+    handleImageTransformChange(settings);
+    setImageWorkflowStep('settings');
+    setRestoredProjectMode(false);
+    setGenerationStatus({ state: 'idle', completed: 0, total: 0 });
   };
 
   // ++ 添加：处理相似度输入框变化的函数 ++
@@ -1307,7 +1396,7 @@ export default function Home() {
 
   // 修改useEffect中的pixelateImage调用，加入模式参数
   useEffect(() => {
-    if (restoredProjectMode) return;
+    if (restoredProjectMode || imageWorkflowStep !== 'settings') return;
     if (originalImageSrc && activeBeadPalette.length > 0) {
        const timeoutId = setTimeout(() => {
          if (originalImageSrc && originalCanvasRef.current && pixelatedCanvasRef.current && activeBeadPalette.length > 0) {
@@ -1341,7 +1430,18 @@ export default function Home() {
         // setTotalBeadCount(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [originalImageSrc, granularity, gridHeight, similarityThreshold, maximumColors, minimumRegionSize, customPaletteSelections, pixelationMode, remapTrigger, imageTransform, restoredProjectMode]);
+  }, [originalImageSrc, granularity, gridHeight, similarityThreshold, maximumColors, minimumRegionSize, customPaletteSelections, pixelationMode, remapTrigger, imageTransform, restoredProjectMode, imageWorkflowStep]);
+
+  useEffect(() => {
+    if (!restoredProjectMode || !originalImageSrc) return;
+    const image = new window.Image();
+    image.onload = () => {
+      if (originalCanvasRef.current) {
+        drawImagePreview(originalCanvasRef.current, image, imageTransform);
+      }
+    };
+    image.src = originalImageSrc;
+  }, [imageTransform, originalImageSrc, restoredProjectMode]);
 
   // 确保文件输入框引用在组件挂载后正确设置
   useEffect(() => {
@@ -2379,8 +2479,8 @@ export default function Home() {
         {originalImageSrc && (
           <div data-testid="workflow-stepper" className="sticky top-3 z-30 grid w-full grid-cols-3 overflow-hidden rounded-2xl border border-white/70 bg-white/90 p-1.5 shadow-lg shadow-slate-200/50 backdrop-blur dark:border-slate-700 dark:bg-slate-900/90 dark:shadow-none">
             {[
-              ['1', '裁剪构图', !mappedPixelData],
-              ['2', '调整图纸', Boolean(mappedPixelData) && !isManualColoringMode],
+              ['1', '裁剪构图', imageWorkflowStep === 'crop'],
+              ['2', '调整图纸', imageWorkflowStep === 'settings' && !isManualColoringMode],
               ['3', '精修导出', isManualColoringMode],
             ].map(([number, label, active]) => (
               <div key={number as string} className={`flex min-h-11 items-center justify-center gap-2 rounded-xl px-2 text-xs font-semibold sm:text-sm ${active ? 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' : 'text-slate-500'}`}>
@@ -2390,21 +2490,23 @@ export default function Home() {
             ))}
           </div>
         )}
-        <LocalProjectsPanel
-          projects={projects}
-          activeProjectId={activeProjectId}
-          activeProjectName={activeProjectName}
-          saveState={projectSaveState}
-          message={projectMessage}
-          onOpen={(id) => { void handleOpenProject(id); }}
-          onRename={(id, name) => { void handleRenameProject(id, name); }}
-          onDuplicate={(id) => { void handleDuplicateProject(id); }}
-          onDelete={(id, name) => { void handleDeleteProject(id, name); }}
-          onExport={(id) => { void handleExportProject(id); }}
-          onImport={(file) => { void handleImportProject(file); }}
-        />
-        {/* Apply dark mode styles to the Drop Zone */}
-        <div
+        {imageWorkflowStep !== 'crop' && (
+          <>
+            <LocalProjectsPanel
+              projects={projects}
+              activeProjectId={activeProjectId}
+              activeProjectName={activeProjectName}
+              saveState={projectSaveState}
+              message={projectMessage}
+              onOpen={(id) => { void handleOpenProject(id); }}
+              onRename={(id, name) => { void handleRenameProject(id, name); }}
+              onDuplicate={(id) => { void handleDuplicateProject(id); }}
+              onDelete={(id, name) => { void handleDeleteProject(id, name); }}
+              onExport={(id) => { void handleExportProject(id); }}
+              onImport={(file) => { void handleImportProject(file); }}
+            />
+            {/* Apply dark mode styles to the Drop Zone */}
+            <div
           data-testid="image-drop-zone"
           role="button"
           tabIndex={isMounted ? 0 : -1}
@@ -2428,52 +2530,67 @@ export default function Home() {
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">拖放到这里，或<span className="font-semibold text-[#e34c27]">点击选择文件</span></p>
           {/* Text color */}
           <p className="mt-4 text-xs text-slate-400">JPG、PNG、WebP · 最大 20 MB · 也支持 CSV 图纸</p>
-        </div>
+            </div>
 
-        {importError && (
-          <div role="alert" className="w-full md:max-w-md rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-            {importError}
-          </div>
-        )}
+            {importError && (
+              <div role="alert" className="w-full md:max-w-md rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+                {importError}
+              </div>
+            )}
 
-        {/* Apply dark mode styles to the Tip Box */}
-        {!originalImageSrc && (
-          <div className="w-full md:max-w-md bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 p-3 rounded-lg border border-blue-100 dark:border-gray-600 shadow-sm">
-            {/* Icon color */}
-            <p className="text-xs text-indigo-700 dark:text-indigo-300 flex items-start">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5 flex-shrink-0 text-blue-500 dark:text-blue-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {/* Text color */}
-              <span className="text-indigo-700 dark:text-indigo-300">小贴士：使用像素图进行转换前，请确保图片的边缘吻合像素格子的边界线，这样可以获得更精确的切割效果和更好的成品。</span>
-            </p>
-          </div>
+            {/* Apply dark mode styles to the Tip Box */}
+            {!originalImageSrc && (
+              <div className="w-full md:max-w-md bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-gray-800 dark:to-gray-700 p-3 rounded-lg border border-blue-100 dark:border-gray-600 shadow-sm">
+                {/* Icon color */}
+                <p className="text-xs text-indigo-700 dark:text-indigo-300 flex items-start">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1.5 flex-shrink-0 text-blue-500 dark:text-blue-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {/* Text color */}
+                  <span className="text-indigo-700 dark:text-indigo-300">小贴士：使用像素图进行转换前，请确保图片的边缘吻合像素格子的边界线，这样可以获得更精确的切割效果和更好的成品。</span>
+                </p>
+              </div>
+            )}
+          </>
         )}
 
                       <input data-testid="image-file-input" type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp,.csv,text/csv,application/csv" onChange={handleFileChange} ref={fileInputRef} className="hidden" />
 
         {/* Controls and Output Area */}
-        {originalImageSrc && (
+        {originalImageSrc && imageWorkflowStep === 'crop' && sourceImageDimensions && imageTransform && (
+          <div className="w-full">
+            <ImageTransformControls
+              imageSrc={originalImageSrc}
+              sourceDimensions={sourceImageDimensions}
+              settings={imageTransform}
+              onChange={handleImageTransformChange}
+              onConfirm={handleConfirmCrop}
+            />
+          </div>
+        )}
+
+        {originalImageSrc && imageWorkflowStep === 'settings' && (
           <div className="w-full flex flex-col items-center space-y-5 sm:space-y-6">
             {/* ++ HIDE Control Row in manual mode ++ */}
             {!isManualColoringMode && (
               /* 修改控制面板网格布局 */
               <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white/85 dark:bg-gray-800 p-4 sm:p-5 rounded-2xl shadow-xl shadow-slate-200/50 border border-white dark:border-gray-700 dark:shadow-none">
-                {sourceImageDimensions && imageTransform && (
-                  <ImageTransformControls
-                    imageSrc={originalImageSrc}
-                    sourceDimensions={sourceImageDimensions}
-                    settings={imageTransform}
-                    onChange={handleImageTransformChange}
-                  />
-                )}
-
-                <div className="sm:col-span-2 flex items-center gap-3 pt-2">
+                <div className="sm:col-span-2 flex flex-wrap items-center gap-3 pt-2">
                   <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-950 text-xs font-bold text-white dark:bg-white dark:text-slate-950">2</span>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <h2 className="font-semibold text-slate-900 dark:text-white">设置拼豆图纸</h2>
                     <p className="text-xs text-slate-500">先定格数，再按需要微调颜色与细节</p>
                   </div>
+                  {sourceImageDimensions && imageTransform && (
+                    <button
+                      data-testid="crop-reopen"
+                      type="button"
+                      onClick={() => setImageWorkflowStep('crop')}
+                      className="min-h-10 rounded-full border border-slate-300 px-4 text-sm text-slate-700 hover:border-[#ff5c35] hover:text-[#e34c27] dark:border-slate-600 dark:text-slate-200"
+                    >
+                      重新裁剪
+                    </button>
+                  )}
                 </div>
                 {/* Granularity Input */}
                 <div className="flex-1">
@@ -2696,7 +2813,7 @@ export default function Home() {
               <div className={isManualColoringMode ? 'hidden' : 'mb-4 rounded-xl border border-gray-100 bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800'}>
                 <p className="mb-2 text-center text-xs font-medium text-gray-600 dark:text-gray-300">预处理原图</p>
                 <div className="flex justify-center overflow-auto rounded-lg bg-gray-100 p-2 dark:bg-gray-700">
-                  <canvas ref={originalCanvasRef} className="block h-auto max-h-80 max-w-full rounded" />
+                  <canvas data-testid="processed-image-canvas" ref={originalCanvasRef} className="block h-auto max-h-80 max-w-full rounded" />
                 </div>
 
                 <div data-testid="generation-status" className="sm:col-span-2 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-200">
