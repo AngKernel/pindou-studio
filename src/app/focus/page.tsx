@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import MakerCanvas from '../../components/MakerCanvas';
+import MakerOverviewCanvas, { MakerBoardMiniMap } from '../../components/MakerOverviewCanvas';
 import { partitionPattern } from '../../core/board';
 import { calculateMakerProgress, toggleCompletedCell } from '../../core/maker';
 import { ProjectError, type PatternProject } from '../../core/project';
@@ -27,6 +28,8 @@ export default function FocusMode() {
   const [locked, setLocked] = useState(false);
   const [hideCompleted, setHideCompleted] = useState(false);
   const [cellSize, setCellSize] = useState(24);
+  const [overviewCellSize, setOverviewCellSize] = useState(24);
+  const [viewMode, setViewMode] = useState<'board' | 'global'>('board');
   const [wakeMessage, setWakeMessage] = useState('屏幕常亮未启用');
   const storeRef = useRef<IndexedDbProjectStore | null>(null);
   const skipFirstSaveRef = useRef(true);
@@ -118,6 +121,19 @@ export default function FocusMode() {
     } : current);
   }, []);
 
+  const navigateToCell = useCallback((row: number, column: number) => {
+    if (!layout) return;
+    const region = layout.regions.find((candidate) => (
+      row >= candidate.startRow
+      && row < candidate.startRow + candidate.height
+      && column >= candidate.startColumn
+      && column < candidate.startColumn + candidate.width
+    ));
+    if (!region) return;
+    updateActiveBoard(region.index);
+    setViewMode('board');
+  }, [layout, updateActiveBoard]);
+
   const handleCell = useCallback((row: number, column: number) => {
     setProject((current) => {
       if (!current) return current;
@@ -200,6 +216,38 @@ export default function FocusMode() {
             </div>
           </section>
 
+          <section>
+            <p className="mb-2 text-xs font-medium text-gray-400">查看范围</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                data-testid="maker-board-view"
+                onClick={() => setViewMode('board')}
+                className={`min-h-11 rounded ${viewMode === 'board' ? 'bg-violet-600 text-white' : 'bg-gray-800'}`}
+              >
+                当前豆板
+              </button>
+              <button
+                data-testid="maker-global-view"
+                onClick={() => setViewMode('global')}
+                className={`min-h-11 rounded ${viewMode === 'global' ? 'bg-violet-600 text-white' : 'bg-gray-800'}`}
+              >
+                全局图纸
+              </button>
+            </div>
+          </section>
+
+          {viewMode === 'board' && (
+            <section className="rounded-lg bg-gray-950 p-3">
+              <p className="mb-2 text-xs text-gray-400">当前板在全图中的位置（黄色框）</p>
+              <MakerBoardMiniMap
+                project={project}
+                layout={layout}
+                activeRegion={activeRegion}
+                onNavigate={navigateToCell}
+              />
+            </section>
+          )}
+
           <section className="rounded-lg bg-gray-950 p-3 text-sm">
             <p>当前板：<strong data-testid="board-progress">{progressLabel(boardProgress.completed, boardProgress.total, boardProgress.percentage)}</strong></p>
             <p className="mt-2">整体：<strong data-testid="overall-progress">{progressLabel(overallProgress.completed, overallProgress.total, overallProgress.percentage)}</strong></p>
@@ -216,8 +264,22 @@ export default function FocusMode() {
           <label className="flex min-h-11 items-center gap-2 text-sm"><input data-testid="hide-completed" type="checkbox" checked={hideCompleted} onChange={(event) => setHideCompleted(event.target.checked)} />隐藏已完成格</label>
 
           <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setCellSize((value) => Math.max(12, value - 4))} className="min-h-11 rounded bg-gray-800">缩小</button>
-            <button onClick={() => setCellSize((value) => Math.min(40, value + 4))} className="min-h-11 rounded bg-gray-800">放大</button>
+            <button
+              onClick={() => viewMode === 'global'
+                ? setOverviewCellSize((value) => Math.max(18, value - 3))
+                : setCellSize((value) => Math.max(12, value - 4))}
+              className="min-h-11 rounded bg-gray-800"
+            >
+              缩小
+            </button>
+            <button
+              onClick={() => viewMode === 'global'
+                ? setOverviewCellSize((value) => Math.min(36, value + 3))
+                : setCellSize((value) => Math.min(40, value + 4))}
+              className="min-h-11 rounded bg-gray-800"
+            >
+              放大
+            </button>
           </div>
           <button data-testid="wake-lock" onClick={() => { void toggleWakeLock(); }} className="min-h-11 w-full rounded bg-indigo-600 px-3 text-sm">切换屏幕常亮</button>
           <p data-testid="wake-status" role="status" className="text-xs text-gray-400">{wakeMessage}</p>
@@ -227,16 +289,28 @@ export default function FocusMode() {
 
         <section className="min-h-[65vh] overflow-auto rounded-xl border border-gray-800 bg-gray-900 p-3">
           <div className="mx-auto w-max">
-            <MakerCanvas
-              project={project}
-              region={activeRegion}
-              selectedPaletteIndex={selectedPaletteIndex}
-              cursor={cursor}
-              locked={locked}
-              hideCompleted={hideCompleted}
-              cellSize={cellSize}
-              onCell={handleCell}
-            />
+            {viewMode === 'board' ? (
+              <MakerCanvas
+                project={project}
+                region={activeRegion}
+                selectedPaletteIndex={selectedPaletteIndex}
+                cursor={cursor}
+                locked={locked}
+                hideCompleted={hideCompleted}
+                cellSize={cellSize}
+                onCell={handleCell}
+              />
+            ) : (
+              <MakerOverviewCanvas
+                project={project}
+                layout={layout}
+                activeRegion={activeRegion}
+                selectedPaletteIndex={selectedPaletteIndex}
+                hideCompleted={hideCompleted}
+                cellSize={overviewCellSize}
+                onNavigate={navigateToCell}
+              />
+            )}
           </div>
         </section>
       </div>

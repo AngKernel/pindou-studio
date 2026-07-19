@@ -32,6 +32,21 @@ function makeProject(): PatternProject {
     board: { width: 29, height: 29, beadDiameterMm: 5 },
     makerState: { activeBoardIndex: 0, lastPosition: { row: 1, column: 0 } },
     generationSettings: { mode: 'cartoon', maximumColors: 12, nested: { enabled: true } },
+    sourceImage: {
+      dataUrl: 'data:image/png;base64,iVBORw0KGgo=',
+      width: 2,
+      height: 2,
+      transform: {
+        crop: { x: 0, y: 0, width: 2, height: 2 },
+        rotation: 90,
+        flipHorizontal: true,
+        flipVertical: false,
+        scale: 1,
+        offsetX: 0,
+        offsetY: 0,
+        background: { mode: 'preserve-alpha' },
+      },
+    },
     thumbnailDataUrl: 'data:image/png;base64,iVBORw0KGgo=',
     createdAt: '2026-07-16T01:00:00.000Z',
     updatedAt: '2026-07-16T02:00:00.000Z',
@@ -95,6 +110,7 @@ describe('project serialization', () => {
       formatVersion: 2,
     } as Record<string, unknown>;
     delete previous.makerState;
+    delete previous.sourceImage;
 
     const migrated = parseProject(JSON.stringify(previous));
     expect(migrated.formatVersion).toBe(3);
@@ -139,6 +155,13 @@ describe('project serialization', () => {
     expectCode(() => parseProject({
       ...serializable,
       board: { ...serializable.board, beadDiameterMm: 20.1 },
+    }), 'INVALID_PROJECT');
+    expectCode(() => parseProject({
+      ...serializable,
+      sourceImage: {
+        ...serializable.sourceImage,
+        width: 1,
+      },
     }), 'INVALID_PROJECT');
   });
 });

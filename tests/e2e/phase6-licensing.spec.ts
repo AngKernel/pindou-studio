@@ -133,6 +133,7 @@ test('disables the experimental entitlement offline while generation and ordinar
   await expect(page.getByTestId('licensing-mode')).toHaveText('服务离线');
   await page.goto('/');
   await page.getByTestId('image-file-input').setInputFiles('tests/fixtures/phase1/transparent-1.png');
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', { timeout: 45_000 });
   await expect(page.getByTestId('export-panel')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId('export-png')).toBeEnabled();

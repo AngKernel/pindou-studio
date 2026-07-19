@@ -18,6 +18,7 @@ interface WorkspaceProjectInput {
   readonly height: number;
   readonly paletteId: ColorSystem;
   readonly generationSettings: Readonly<Record<string, JsonValue>>;
+  readonly sourceImage?: PatternProject['sourceImage'];
   readonly board?: PatternProject['board'];
   readonly thumbnailDataUrl?: string;
   readonly previous?: PatternProject | null;
@@ -137,6 +138,7 @@ export function createProjectFromWorkspace(input: WorkspaceProjectInput): Patter
       lastPosition: canPreservePosition ? lastPosition : null,
     },
     generationSettings: input.generationSettings,
+    sourceImage: input.sourceImage ?? input.previous?.sourceImage,
     thumbnailDataUrl: input.thumbnailDataUrl,
     createdAt: input.previous?.createdAt ?? input.now,
     updatedAt: input.now,

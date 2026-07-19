@@ -7,6 +7,7 @@ async function createProject(page: Page): Promise<void> {
   }).png().toBuffer();
   await page.goto('/');
   await page.getByTestId('image-file-input').setInputFiles({ name: 'maker.png', mimeType: 'image/png', buffer });
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', { timeout: 45_000 });
   await expect(page.getByTestId('active-project-name')).toContainText('已保存到此浏览器', { timeout: 15_000 });
 }
@@ -28,6 +29,11 @@ test('configures boards and persists maker progress, board and lock semantics', 
   await expect(page.getByTestId('active-project-name')).toContainText('已保存到此浏览器', { timeout: 15_000 });
 
   await enterMaker(page);
+  await expect(page.getByTestId('maker-board-minimap')).toBeVisible();
+  await page.getByTestId('maker-global-view').click();
+  await expect(page.getByTestId('maker-global-canvas')).toBeVisible();
+  await expect(page.getByTestId('maker-global-canvas')).toHaveAttribute('aria-label', /每个格子显示色号/);
+  await page.getByTestId('maker-board-view').click();
   const canvas = page.getByTestId('maker-canvas');
   await canvas.click({ position: { x: 12, y: 12 } });
   await expect(page.getByTestId('overall-progress')).toContainText('1/10000');

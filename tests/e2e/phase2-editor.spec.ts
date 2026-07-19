@@ -7,6 +7,7 @@ async function openEditor(page: Page): Promise<void> {
   }).png().toBuffer();
   await page.goto('/');
   await page.getByTestId('image-file-input').setInputFiles({ name: 'editor.png', mimeType: 'image/png', buffer });
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', { timeout: 45_000 });
   await page.getByLabel('锁定处理区域宽高比').uncheck();
   await page.getByLabel('横轴切割数量 (10-300):').fill('10');

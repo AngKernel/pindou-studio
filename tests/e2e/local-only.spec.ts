@@ -13,6 +13,7 @@ test('runs the public build without licensing UI, credentials, or cloud requests
   await expect(page.getByTestId('activation-link')).toHaveCount(0);
 
   await page.getByTestId('image-file-input').setInputFiles('tests/fixtures/phase1/transparent-1.png');
+  await page.getByTestId('crop-confirm').click();
   await expect(page.getByTestId('generation-status')).toContainText('生成完成', { timeout: 45_000 });
   await expect(page.getByTestId('export-panel')).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId('export-png')).toBeEnabled();

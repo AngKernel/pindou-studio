@@ -2,10 +2,11 @@ import { GridDownloadOptions } from '../types/downloadTypes';
 import {
   MAX_PROJECT_CELLS,
   MAX_PROJECT_DIMENSION,
-  MAX_PROJECT_FILE_BYTES,
 } from '../core/project';
 import { MappedPixel, PaletteColor } from './pixelation';
 import { getDisplayColorKey, getColorKeyByHex, ColorSystem } from './colorSystemUtils';
+
+const MAX_CSV_FILE_BYTES = 5 * 1024 * 1024;
 
 // 用于获取对比色的工具函数 - 从page.tsx复制
 function getContrastColor(hex: string): string {
@@ -174,8 +175,8 @@ export function parseCsvData(text: string): ImportedCsvData {
 
 // 导入CSV hex数据的函数
 export function importCsvData(file: File): Promise<ImportedCsvData> {
-  if (file.size > MAX_PROJECT_FILE_BYTES) {
-    return Promise.reject(new Error(`CSV文件不能超过${Math.floor(MAX_PROJECT_FILE_BYTES / 1024 / 1024)} MB`));
+  if (file.size > MAX_CSV_FILE_BYTES) {
+    return Promise.reject(new Error(`CSV文件不能超过${Math.floor(MAX_CSV_FILE_BYTES / 1024 / 1024)} MB`));
   }
 
   return new Promise((resolve, reject) => {

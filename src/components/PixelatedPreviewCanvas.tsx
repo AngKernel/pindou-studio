@@ -110,6 +110,31 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   const touchMovedRef = useRef<boolean>(false);
   const [isHighlighting, setIsHighlighting] = useState(false);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !gridDimensions) return;
+    const baseWidth = 500;
+    const maximumWidth = Math.min(1200, Math.max(320, window.innerWidth * 0.9));
+    const requestedWidth = gridDimensions.N > 100
+      ? Math.max(
+          gridDimensions.N * 4,
+          Math.min(maximumWidth, Math.max(baseWidth, gridDimensions.N * 6)),
+        )
+      : baseWidth;
+    const requestedHeight = requestedWidth * gridDimensions.M / gridDimensions.N;
+    const backingScale = Math.min(
+      1,
+      8192 / Math.max(requestedWidth, requestedHeight),
+      Math.sqrt((16 * 1024 * 1024) / (requestedWidth * requestedHeight)),
+    );
+    const width = Math.max(1, Math.round(requestedWidth * backingScale));
+    const height = Math.max(1, Math.round(requestedHeight * backingScale));
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+  }, [canvasRef, gridDimensions]);
+
   // Effect to detect dark mode changes and update state
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -238,6 +263,7 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
 
   return (
     <canvas
+      data-testid="pattern-result-canvas"
       ref={canvasRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -257,4 +283,4 @@ const PixelatedPreviewCanvas: React.FC<PixelatedPreviewCanvasProps> = ({
   );
 };
 
-export default PixelatedPreviewCanvas; 
+export default PixelatedPreviewCanvas;
